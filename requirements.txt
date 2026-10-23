@@ -1,0 +1,7 @@
+pyadi-iio>=0.0.17
+pylibiio==0.25
+numpy
+scipy
+matplotlib
+pyserial
+sounddevice

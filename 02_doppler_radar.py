@@ -1,0 +1,252 @@
+"""
+Step 2 - CW Doppler radar with speed alarm (PlutoSDR).
+
+TX: CW tone at CENTER_FREQ + TONE_HZ
+RX: same LO -> mix the tone down to 0 Hz -> decimate to 8 kHz -> FFT
+    Doppler shift fd -> speed v = fd * c / (2 * fc)
+Alarm: louder with speed, faster beeps with stronger echo (closer target).
+
+Run:
+  python 02_doppler_radar.py                    # laptop-speaker alarm
+  python 02_doppler_radar.py --max-kmh 10       # bench test (hand / walking)
+  python 02_doppler_radar.py --port COM5        # also send speed to Arduino Nano
+  python 02_doppler_radar.py --no-sound         # display only
+  python 02_doppler_radar.py --rx-gain 30       # if "CLIPPING" is shown
+Close the plot window to stop.
+"""
+import argparse
+import time
+from datetime import datetime
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+import adi
+
+C = 3e8
+
+# --- Radar settings ---
+PLUTO_URI   = "ip:192.168.2.1"
+CENTER_FREQ = 2.482e9     # Hz, top of the 2.4 GHz ISM band, above the Wi-Fi channels
+SAMPLE_RATE = 1_000_000   # Pluto sample rate
+TONE_HZ     = 100e3       # TX tone offset (keeps the signal away from RX DC offset)
+TX_GAIN_DB  = -10         # TX attenuation (0 = max power)
+RX_GAIN_DB  = 30          # RX gain (0..70); lower it if "CLIPPING" appears
+DECIM_1, DECIM_2 = 25, 5  # 1 MS/s -> 40 kS/s -> 8 kS/s
+FS_DOPPLER  = SAMPLE_RATE / (DECIM_1 * DECIM_2)
+RX_BLOCK    = DECIM_1 * DECIM_2 * 512   # 64000 samples = 64 ms per read
+NFFT        = 4096        # 0.5 s window -> ~2 Hz bins -> ~0.12 m/s resolution
+
+# --- Detection settings ---
+MIN_DOPPLER_HZ = 15       # ignore |fd| below this (TX leakage, ~0.3 m/s)
+MAX_DOPPLER_HZ = 1000     # display/search limit (~225 km/h)
+DETECT_DB      = 15       # peak must be this far above the noise floor
+STRONG_DB      = 40       # SNR treated as "very close" (proximity 100 %)
+MIRROR_DB      = 6        # peak must beat its mirror (-fd) by this much; rejects fans / vibration
+CONFIRM_FRAMES = 2        # consecutive detections needed before reporting a target
+
+# --- Last-speed hold ---
+PASS_END_FRAMES = 16      # ~1 s without target ends a pass
+PASS_MIN_FRAMES = 3       # a pass needs this many detections to count
+LOG_FILE = Path(__file__).with_name("speed_log.csv")
+
+
+def doppler_to_kmh(fd):
+    return fd * C / (2 * CENTER_FREQ) * 3.6
+
+
+class Downconverter:
+    """Mix the received tone to 0 Hz and decimate to FS_DOPPLER, keeping filter state between blocks."""
+
+    def __init__(self):
+        # RX_BLOCK holds a whole number of tone periods, so one mixer table keeps phase continuous
+        self.mixer = np.exp(-2j * np.pi * TONE_HZ * np.arange(RX_BLOCK) / SAMPLE_RATE)
+        self.h2 = signal.firwin(101, 3.5e3, fs=SAMPLE_RATE / DECIM_1)
+        self.z2 = np.zeros(len(self.h2) - 1, complex)
+
+    def __call__(self, x):
+        x = x * self.mixer
+        y = x.reshape(-1, DECIM_1).mean(axis=1)     # stage 1: block average (nulls at multiples of 40 kHz)
+        y, self.z2 = signal.lfilter(self.h2, 1, y, zi=self.z2)
+        return y[::DECIM_2]
+
+
+class AudioAlarm:
+    """Laptop-speaker alarm: volume follows speed, beep rate follows proximity."""
+
+    def __init__(self):
+        import sounddevice as sd
+        self.fs = 44100
+        self.volume = 0.0      # 0..1
+        self.beeps_per_s = 1.0
+        self.pitch = 800.0
+        self.phase = 0.0
+        self.t = 0.0
+        self.stream = sd.OutputStream(samplerate=self.fs, channels=1, callback=self._callback)
+        self.stream.start()
+
+    def _callback(self, out, frames, time_info, status):
+        t = self.t + np.arange(frames) / self.fs
+        gate = ((t * self.beeps_per_s) % 1.0) < 0.5           # 50 % on / off
+        ph = self.phase + 2 * np.pi * self.pitch * np.arange(frames) / self.fs
+        out[:, 0] = self.volume * gate * np.sin(ph)
+        self.phase = (ph[-1] + 2 * np.pi * self.pitch / self.fs) % (2 * np.pi)
+        self.t = t[-1] + 1 / self.fs
+
+    def update(self, kmh, proximity, max_kmh):
+        if proximity <= 0:
+            self.volume = 0.0
+            return
+        self.volume = float(np.clip(abs(kmh) / max_kmh, 0.1, 1.0))
+        self.beeps_per_s = 1.0 + 9.0 * proximity / 100
+        self.pitch = 600.0 + 600.0 * min(abs(kmh) / max_kmh, 1.0)
+
+    def close(self):
+        self.stream.stop()
+        self.stream.close()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", help="Arduino serial port, e.g. COM5")
+    ap.add_argument("--max-kmh", type=float, default=60, help="speed at which the alarm is loudest")
+    ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
+    ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
+    ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")
+    args = ap.parse_args()
+
+    # --- Pluto setup ---
+    sdr = adi.Pluto(PLUTO_URI)
+    sdr.sample_rate = SAMPLE_RATE
+    sdr.rx_lo = int(CENTER_FREQ)
+    sdr.tx_lo = int(CENTER_FREQ)
+    sdr.rx_rf_bandwidth = SAMPLE_RATE
+    sdr.tx_rf_bandwidth = SAMPLE_RATE
+    sdr.gain_control_mode_chan0 = "manual"
+    sdr.rx_hardwaregain_chan0 = args.rx_gain
+    sdr.tx_hardwaregain_chan0 = args.tx_gain
+    sdr.rx_buffer_size = RX_BLOCK
+
+    n = np.arange(RX_BLOCK)
+    sdr.tx_cyclic_buffer = True
+    sdr.tx(0.5 * np.exp(2j * np.pi * TONE_HZ * n / SAMPLE_RATE) * 2**14)
+    time.sleep(1)
+    print(f"Radar running at {CENTER_FREQ/1e9:.2f} GHz, Doppler rate {FS_DOPPLER:.0f} Hz, "
+          f"resolution {doppler_to_kmh(FS_DOPPLER / NFFT):.2f} km/h")
+
+    alarm = None if args.no_sound else AudioAlarm()
+    arduino = None
+    if args.port:
+        import serial
+        arduino = serial.Serial(args.port, 115200, timeout=0)
+        time.sleep(2)                                   # Nano resets when the port opens
+        print(f"Sending speed to Arduino on {args.port}")
+
+    down = Downconverter()
+    history = np.zeros(NFFT, complex)
+    window = np.hanning(NFFT)
+    freqs = np.fft.fftshift(np.fft.fftfreq(NFFT, 1 / FS_DOPPLER))
+    band = (np.abs(freqs) >= MIN_DOPPLER_HZ) & (np.abs(freqs) <= MAX_DOPPLER_HZ)
+    recent = []
+    hits = 0
+    pass_peak, pass_frames, lost_frames = 0.0, 0, 0     # current pass
+    last_kmh, last_time = None, ""                       # last completed pass
+    if not LOG_FILE.exists():
+        LOG_FILE.write_text("date,time,speed_kmh,direction\n")
+
+    # --- Display ---
+    plt.ion()
+    fig, (ax_spec, ax_txt) = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1.6]})
+    show = np.abs(freqs) <= MAX_DOPPLER_HZ
+    kmh_axis = doppler_to_kmh(freqs[show])
+    line, = ax_spec.plot(kmh_axis, np.zeros(show.sum()))
+    thr_line, = ax_spec.plot(kmh_axis, np.zeros(show.sum()), "r--", lw=0.8, label="detection threshold")
+    ax_spec.set_xlabel("Speed (km/h)   [+ approaching / - receding]")
+    ax_spec.set_ylabel("Power (dB)")
+    ax_spec.set_ylim(-140, -40)
+    ax_spec.grid(True)
+    ax_spec.legend(loc="upper right")
+    ax_txt.axis("off")
+    speed_txt = ax_txt.text(0.5, 0.8, "", ha="center", va="center", fontsize=22, family="monospace")
+    last_txt = ax_txt.text(0.5, 0.25, "LAST SPEED:  --", ha="center", va="center", fontsize=36,
+                           family="monospace", weight="bold", color="navy")
+
+    try:
+        while plt.fignum_exists(fig.number):
+            raw = sdr.rx()
+            clipping = np.max(np.abs(raw)) > 0.9 * 2**11
+            y = down(raw / 2**11)
+            history = np.concatenate([history[len(y):], y])
+
+            x = history - history.mean()                # remove TX leakage (DC)
+            spec = np.fft.fftshift(np.fft.fft(x * window)) / NFFT
+            p_db = 20 * np.log10(np.abs(spec) + 1e-15)
+
+            noise_db = np.median(p_db[band])
+            k = np.flatnonzero(band)[np.argmax(p_db[band])]
+            snr = p_db[k] - noise_db
+            km = NFFT - k                                   # bin of the mirror frequency -fd
+            mirror_db = p_db[max(km - 2, 0):km + 3].max()   # +-2 bins tolerance
+
+            hit = snr >= DETECT_DB and p_db[k] - mirror_db >= MIRROR_DB
+            hits = hits + 1 if hit else 0
+
+            if hits >= CONFIRM_FRAMES:
+                recent = (recent + [doppler_to_kmh(freqs[k])])[-3:]
+                kmh = float(np.median(recent))
+                proximity = float(np.clip((snr - DETECT_DB) / (STRONG_DB - DETECT_DB), 0, 1) * 100)
+                direction = "APPROACHING" if kmh > 0 else "RECEDING"
+                msg = f"{abs(kmh):6.1f} km/h  {direction}\nsignal {snr:4.1f} dB  proximity {proximity:3.0f}%"
+                color = "red" if abs(kmh) >= args.max_kmh else "black"
+            else:
+                recent = []
+                kmh, proximity = 0.0, 0.0
+                msg, color = "  ---  no target  ---", "gray"
+            if clipping:
+                msg += "\nCLIPPING: lower --rx-gain"
+
+            # Track each pass; when it ends, its peak speed becomes the "last speed"
+            if proximity > 0:
+                if abs(kmh) > abs(pass_peak):
+                    pass_peak = kmh
+                pass_frames += 1
+                lost_frames = 0
+            elif pass_frames:
+                lost_frames += 1
+                if lost_frames >= PASS_END_FRAMES:
+                    if pass_frames >= PASS_MIN_FRAMES:
+                        now = datetime.now()
+                        last_kmh, last_time = pass_peak, now.strftime("%H:%M:%S")
+                        direction = "approaching" if last_kmh > 0 else "receding"
+                        with LOG_FILE.open("a") as fh:
+                            fh.write(f"{now:%Y-%m-%d},{last_time},{abs(last_kmh):.1f},{direction}\n")
+                        print(f"[{last_time}] pass: {abs(last_kmh):.1f} km/h {direction}")
+                        last_txt.set_text(f"LAST SPEED: {abs(last_kmh):.1f} km/h  "
+                                          f"{'→' if last_kmh > 0 else '←'}  ({last_time})")
+                    pass_peak, pass_frames, lost_frames = 0.0, 0, 0
+
+            if alarm:
+                alarm.update(kmh, proximity, args.max_kmh)
+            if arduino:
+                volume = np.clip(abs(kmh) / args.max_kmh, 0.1, 1.0) * 100 if proximity > 0 else 0
+                last = abs(last_kmh) if last_kmh is not None else -1
+                arduino.write(f"S{abs(kmh):.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f}\n".encode())
+
+            line.set_ydata(p_db[show])
+            thr_line.set_ydata(np.full(show.sum(), noise_db + DETECT_DB))
+            speed_txt.set_text(msg)
+            speed_txt.set_color(color)
+            plt.pause(0.001)
+    finally:
+        sdr.tx_destroy_buffer()
+        sdr.rx_destroy_buffer()
+        if alarm:
+            alarm.close()
+        if arduino:
+            arduino.write(b"S0,P0,V0,L-1\n")
+            arduino.close()
+        print("Radar stopped.")
+
+
+if __name__ == "__main__":
+    main()
