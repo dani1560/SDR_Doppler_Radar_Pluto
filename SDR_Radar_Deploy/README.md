@@ -3,22 +3,27 @@
 CW Doppler radar on an ADALM-PLUTO SDR at 2.482 GHz. Measures target speed in km/h and sounds an alarm:
 louder and higher-pitched for faster targets, faster beeps for closer (stronger) echoes.
 
-After each pass, the **last speed** (peak speed of that pass) stays on the laptop screen and on the
-Arduino LED display until the next pass. Every pass is logged to `speed_log.csv` (date, time, speed, direction).
+It works like a street speed camera: each pass's **peak speed** (one decimal on screen, e.g. `45.3`; whole km/h on this LED module) stays on the
+laptop screen and on the Arduino LED display until the next pass. A pass faster than the **speed limit** is
+**captured**: shown in red on screen, blinking on the LED, and marked `captured=yes` in `speed_log.csv`
+(date, time, speed, direction, limit, captured). The screen also shows the session's capture count and top speed.
 
 ## Quick start
 
 1. Plug the Pluto into its **middle** micro-USB port (USB symbol). Plug in the Arduino Nano (optional).
 2. Double-click **`START_RADAR.bat`**.
-3. Choose **1** (walking / hand wave) or **2** (cars). Close the plot window to stop.
+3. The radar starts by itself. Close the plot window to stop.
 
 `START_RADAR.bat` checks Python, installs the Python packages, installs the Pluto drivers if libiio is
-missing, finds the Pluto and the Arduino's COM port, then shows this menu:
+missing, finds the Pluto and the Arduino's COM port, and starts the radar with speed limit **50 km/h**.
+To change the limit, edit `set "LIMIT=50"` near the top of `START_RADAR.bat` (use 10 for walking tests).
+
+**`TOOLS.bat`** opens a menu for tests and setup:
 
 | Option | What it does |
 |---|---|
-| 1 | Radar, alarm loudest at 10 km/h (bench tests, walking) |
-| 2 | Radar, alarm loudest at 60 km/h (cars, bicycles) |
+| 1 | Radar, captures passes over 10 km/h (bench tests, walking, jogging) |
+| 2 | Radar, captures passes over 50 km/h (cars); alarm loudest at 60 km/h |
 | 3 | Pluto test: peak at +100 kHz means TX and RX work |
 | 4 | Arduino display/buzzer test with simulated passes (no Pluto needed) |
 | 5 | Upload `speed_alarm.ino` to the Nano (needs Arduino IDE 2 installed) |
@@ -32,7 +37,9 @@ and buzzer.
 
 | File | Purpose |
 |---|---|
-| `START_RADAR.bat` | One-click setup and launcher (menu above) |
+| `START_RADAR.bat` | One-click setup and radar start |
+| `TOOLS.bat` | Menu: tests, walking mode, Arduino upload, drivers, speed log |
+| `DEPLOY.md` | Step-by-step setup on another laptop |
 | `02_doppler_radar.py` | Main radar program (spectrum, speed display, alarm) |
 | `01_pluto_test.py` | Hardware check: shows a peak at +100 kHz if TX and RX work |
 | `03_alarm_test.py` | Arduino check without the Pluto: `python 03_alarm_test.py auto` (or `COM9`) |
@@ -51,7 +58,7 @@ and buzzer.
    `drivers\PlutoSDR-M2k-USB-Drivers.exe`, then `drivers\libiio-0.26.ga0eca0d2-setup.exe`.
    Use libiio **v0.26**, not v1.x: the Python package is pinned to `pylibiio==0.25` to match it.
 3. Plug the Pluto into its **middle** micro-USB port. Wait about 30 s: the Ready LED comes on and a
-   `PlutoSDR` drive appears. The menu then shows `PlutoSDR : connected`.
+   `PlutoSDR` drive appears. The launcher then shows `PlutoSDR : connected` and starts the radar.
 
 ## Antennas
 
@@ -89,28 +96,34 @@ Buzzer:   Nano D9 --[1k]--> NPN base           (buzzer must be on D9: Timer1 har
 
 NPN pins, flat face toward you, legs down: **2N2222 = E B C**, **BC547 = C B E** (reversed).
 
-The display shows the live speed (whole km/h) during a pass, then holds the last speed. `----` means no
-pass yet. Without a buzzer everything else works; the Nano's on-board LED blinks with the beeps.
+The display shows the live speed during a pass, then holds the pass's peak speed; it
+blinks if that pass was captured (over the limit). `----` means no pass yet.
+This 0.56" TM1637 module has only a colon and no decimal points, so it shows **whole km/h** (`  45`);
+the screen and `speed_log.csv` keep one decimal. For a decimal point on the LED, use a TM1637 module
+**with decimal points** (same wiring) and set `HAS_DOTS = true` in `speed_alarm.ino` (shows `45.3`).
 
-Upload the sketch with menu option **5**, or in Arduino IDE:
+Without a buzzer everything else works; the Nano's on-board LED blinks with the beeps.
+
+Upload the sketch with `TOOLS.bat` option **5**, or in Arduino IDE:
 
 1. For clone Nanos (USB-SERIAL CH340), install the CH340 driver if no COM port appears.
 2. Tools -> Manage Libraries -> install **"TM1637" by Avishay Orpaz**.
 3. Open `speed_alarm/speed_alarm.ino`. Board: **Arduino Nano**; for clones, Processor:
    **ATmega328P (Old Bootloader)** (fixes `not in sync`).
-4. Upload. The display shows `8888` and the buzzer chirps (wiring OK), then `----`.
+4. Upload. The display shows `88:88` and the buzzer chirps (wiring OK), then `----`.
 5. Close the Arduino IDE before running the radar (it keeps the COM port busy).
 
 ## Command-line options
 
 ```
-python 02_doppler_radar.py [--max-kmh 60] [--port COM9 | --port auto] [--no-sound] [--rx-gain 30] [--tx-gain -10]
+python 02_doppler_radar.py [--max-kmh 60] [--limit 50] [--port COM9 | --port auto] [--no-sound] [--rx-gain 30] [--tx-gain -10]
 ```
 
 | Option | Meaning |
 |---|---|
 | `--max-kmh` | Speed at which the alarm is loudest. Use 10 indoors, 60+ for cars |
-| `--port` | Arduino COM port, or `auto`; sends `S<kmh>,P<proximity>,V<volume>,L<last kmh>` lines at 115200 baud |
+| `--limit` | Speed limit in km/h: faster passes are captured (default: same as `--max-kmh`) |
+| `--port` | Arduino COM port, or `auto`; sends `S<kmh>,P<proximity>,V<volume>,L<last kmh>,F<captured>` lines at 115200 baud |
 | `--no-sound` | Turn off the laptop-speaker alarm |
 | `--rx-gain` | RX gain, 0..70 dB. Lower it if the screen shows `CLIPPING` |
 | `--tx-gain` | TX attenuation, 0 (max power) to -89 dB |
@@ -138,7 +151,7 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 | Carrier | 2.482 GHz (top of the 2.4 GHz ISM band) |
 | Waveform | CW tone at +100 kHz offset |
 | Sample rate | 1 MS/s, decimated to 8 kS/s |
-| FFT | 4096 points (0.5 s), ~1.95 Hz bins, ~0.42 km/h resolution |
+| FFT | 4096 points (0.5 s), ~1.95 Hz bins (0.42 km/h); parabolic peak interpolation gives 0.1 km/h readout |
 | Speed range | about 3.3 to 218 km/h, approaching and receding |
 | Clutter rejection | Mirror-peak test (fans) plus 2-frame confirmation |
 | Update rate | 64 ms per frame (measured: the loop keeps up with the Pluto, no dropped samples) |

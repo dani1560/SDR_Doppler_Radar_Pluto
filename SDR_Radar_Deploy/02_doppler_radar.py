@@ -5,9 +5,12 @@ TX: CW tone at CENTER_FREQ + TONE_HZ
 RX: same LO -> mix the tone down to 0 Hz -> decimate to 8 kHz -> FFT
     Doppler shift fd -> speed v = fd * c / (2 * fc)
 Alarm: louder with speed, faster beeps with stronger echo (closer target).
+Speed camera: each pass's peak speed is held on screen / LED and logged; a pass faster than
+--limit is CAPTURED (marked in the log, shown in red, blinking on the LED display).
 
 Run:
-  python 02_doppler_radar.py                    # laptop-speaker alarm
+  python 02_doppler_radar.py                    # laptop-speaker alarm, limit 60 km/h
+  python 02_doppler_radar.py --limit 50         # capture passes faster than 50 km/h
   python 02_doppler_radar.py --max-kmh 10       # bench test (hand / walking)
   python 02_doppler_radar.py --port COM5        # also send speed to Arduino Nano
   python 02_doppler_radar.py --port auto        # find the Arduino's COM port automatically
@@ -53,10 +56,18 @@ CONFIRM_FRAMES = 2        # consecutive detections needed before reporting a tar
 PASS_END_FRAMES = 16      # ~1 s without target ends a pass
 PASS_MIN_FRAMES = 3       # a pass needs this many detections to count
 LOG_FILE = Path(__file__).with_name("speed_log.csv")
+LOG_HEADER = "date,time,speed_kmh,direction,limit_kmh,captured"
 
 
 def doppler_to_kmh(fd):
     return fd * C / (2 * CENTER_FREQ) * 3.6
+
+
+def peak_offset(p_db, k):
+    """Sub-bin position of the peak at bin k (parabola through k-1, k, k+1), in bins (-0.5..0.5)."""
+    a, b, c = p_db[k - 1], p_db[k], p_db[k + 1]
+    curve = a - 2 * b + c
+    return float(np.clip(0.5 * (a - c) / curve, -0.5, 0.5)) if curve < 0 else 0.0
 
 
 class Downconverter:
@@ -148,14 +159,27 @@ def open_arduino(port):
     return arduino
 
 
-def log_pass(kmh):
-    """Append one pass to the CSV log and return its time string."""
+def prepare_log():
+    """Create the CSV log, or add the limit/captured columns to a log from an older version."""
+    if not LOG_FILE.exists():
+        LOG_FILE.write_text(LOG_HEADER + "\n")
+        return
+    lines = LOG_FILE.read_text().splitlines()
+    if lines and lines[0] != LOG_HEADER:
+        LOG_FILE.write_text("\n".join([LOG_HEADER] + [l + ",," for l in lines[1:] if l]) + "\n")
+
+
+def log_pass(kmh, limit):
+    """Append one pass to the CSV log; return (time string, captured)."""
     now = datetime.now()
     direction = "approaching" if kmh > 0 else "receding"
+    captured = abs(kmh) > limit
     with LOG_FILE.open("a") as fh:
-        fh.write(f"{now:%Y-%m-%d},{now:%H:%M:%S},{abs(kmh):.1f},{direction}\n")
-    print(f"[{now:%H:%M:%S}] pass: {abs(kmh):.1f} km/h {direction}")
-    return f"{now:%H:%M:%S}"
+        fh.write(f"{now:%Y-%m-%d},{now:%H:%M:%S},{abs(kmh):.1f},{direction},{limit:g},"
+                 f"{'yes' if captured else 'no'}\n")
+    print(f"[{now:%H:%M:%S}] pass: {abs(kmh):.1f} km/h {direction}"
+          + (f"  ** CAPTURED: over {limit:g} km/h **" if captured else ""))
+    return f"{now:%H:%M:%S}", captured
 
 
 def run_radar(sdr, alarm, arduino, args):
@@ -167,9 +191,9 @@ def run_radar(sdr, alarm, arduino, args):
     recent = []
     hits = 0
     pass_peak, pass_frames, lost_frames = 0.0, 0, 0     # current pass
-    last_kmh = None                                      # last completed pass
-    if not LOG_FILE.exists():
-        LOG_FILE.write_text("date,time,speed_kmh,direction\n")
+    last_kmh, last_captured = None, False                # last completed pass
+    n_captured, top_kmh = 0, 0.0                         # this session
+    prepare_log()
 
     # --- Display ---
     plt.ion()
@@ -185,9 +209,24 @@ def run_radar(sdr, alarm, arduino, args):
     ax_spec.grid(True)
     ax_spec.legend(loc="upper right")
     ax_txt.axis("off")
-    speed_txt = ax_txt.text(0.5, 0.8, "", ha="center", va="center", fontsize=22, family="monospace")
-    last_txt = ax_txt.text(0.5, 0.25, "LAST SPEED:  --", ha="center", va="center", fontsize=36,
+    speed_txt = ax_txt.text(0.5, 0.85, "", ha="center", va="center", fontsize=22, family="monospace")
+    last_txt = ax_txt.text(0.5, 0.38, "LAST SPEED:  --", ha="center", va="center", fontsize=36,
                            family="monospace", weight="bold", color="navy")
+    stats_txt = ax_txt.text(0.5, 0.02, f"limit {args.limit:g} km/h   captured 0", ha="center",
+                            va="center", fontsize=14, family="monospace", color="dimgray")
+
+    def end_pass(kmh):
+        """A pass is over: its peak speed becomes the held 'last speed'; capture it if over the limit."""
+        nonlocal last_kmh, last_captured, n_captured, top_kmh
+        last_kmh = kmh
+        last_time, last_captured = log_pass(kmh, args.limit)
+        n_captured += last_captured
+        top_kmh = max(top_kmh, abs(kmh))
+        last_txt.set_text(f"LAST SPEED: {abs(kmh):.1f} km/h  {'→' if kmh > 0 else '←'}  ({last_time})")
+        last_txt.set_color("red" if last_captured else "navy")
+        stats_txt.set_text(("CAPTURED - OVER LIMIT!   " if last_captured else "")
+                           + f"limit {args.limit:g} km/h   captured {n_captured}   top {top_kmh:.1f} km/h")
+        stats_txt.set_color("red" if last_captured else "dimgray")
 
     try:
         while plt.fignum_exists(fig.number):
@@ -210,13 +249,14 @@ def run_radar(sdr, alarm, arduino, args):
             hits = hits + 1 if hit else 0
 
             if hits >= CONFIRM_FRAMES:
-                recent = (recent + [doppler_to_kmh(freqs[k])])[-3:]
+                fd = freqs[k] + peak_offset(p_db, k) * FS_DOPPLER / NFFT   # sub-bin precision
+                recent = (recent + [doppler_to_kmh(fd)])[-3:]
                 kmh = float(np.median(recent))
                 # at least 1 %: proximity > 0 is what marks a confirmed target below
                 proximity = float(np.clip((snr - DETECT_DB) / (STRONG_DB - DETECT_DB), 0.01, 1) * 100)
                 direction = "APPROACHING" if kmh > 0 else "RECEDING"
                 msg = f"{abs(kmh):6.1f} km/h  {direction}\nsignal {snr:4.1f} dB  proximity {proximity:3.0f}%"
-                color = "red" if abs(kmh) >= args.max_kmh else "black"
+                color = "red" if abs(kmh) > args.limit else "black"
             else:
                 recent = []
                 kmh, proximity = 0.0, 0.0
@@ -234,10 +274,7 @@ def run_radar(sdr, alarm, arduino, args):
                 lost_frames += 1
                 if lost_frames >= PASS_END_FRAMES:
                     if pass_frames >= PASS_MIN_FRAMES:
-                        last_kmh = pass_peak
-                        last_time = log_pass(last_kmh)
-                        last_txt.set_text(f"LAST SPEED: {abs(last_kmh):.1f} km/h  "
-                                          f"{'→' if last_kmh > 0 else '←'}  ({last_time})")
+                        end_pass(pass_peak)
                     pass_peak, pass_frames, lost_frames = 0.0, 0, 0
 
             if alarm:
@@ -245,7 +282,8 @@ def run_radar(sdr, alarm, arduino, args):
             if arduino:
                 volume = np.clip(abs(kmh) / args.max_kmh, 0.1, 1.0) * 100 if proximity > 0 else 0
                 last = abs(last_kmh) if last_kmh is not None else -1
-                arduino.write(f"S{abs(kmh):.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f}\n".encode())
+                arduino.write(f"S{abs(kmh):.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f},"
+                              f"F{int(last_captured)}\n".encode())
 
             line.set_ydata(p_db[show])
             thr_line.set_ydata(np.full(show.sum(), noise_db + DETECT_DB))
@@ -254,21 +292,24 @@ def run_radar(sdr, alarm, arduino, args):
             plt.pause(0.001)
     finally:
         if pass_frames >= PASS_MIN_FRAMES:              # pass still in progress when stopped
-            last_kmh = pass_peak
-            log_pass(last_kmh)
+            end_pass(pass_peak)
         if arduino:                                     # silence the buzzer, keep the last speed shown
             last = abs(last_kmh) if last_kmh is not None else -1
-            arduino.write(f"S0,P0,V0,L{last:.1f}\n".encode())
+            arduino.write(f"S0,P0,V0,L{last:.1f},F{int(last_captured)}\n".encode())
+        print(f"Session: {n_captured} pass(es) captured over {args.limit:g} km/h, top speed {top_kmh:.1f} km/h")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", help="Arduino serial port, e.g. COM5, or 'auto' to find it")
     ap.add_argument("--max-kmh", type=float, default=60, help="speed at which the alarm is loudest")
+    ap.add_argument("--limit", type=float, help="speed limit: faster passes are captured (default: --max-kmh)")
     ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
     ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
     ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")
     args = ap.parse_args()
+    if args.limit is None:
+        args.limit = args.max_kmh
 
     port = args.port
     if port and port.lower() == "auto":

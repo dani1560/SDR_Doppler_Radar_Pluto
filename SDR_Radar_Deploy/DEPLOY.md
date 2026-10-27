@@ -1,0 +1,109 @@
+# Deploying the radar on another laptop
+
+This guide sets up the SDR Doppler radar on a new Windows 10/11 laptop. It takes about 15 minutes and
+needs an internet connection once, to install Python packages.
+
+## What you need
+
+- Windows 10 or 11 laptop with two free USB ports
+- The PlutoSDR with both antennas (and the SMA extension cable)
+- The Arduino Nano with the display, already programmed (optional)
+- This project folder (`SDR_Radar_Deploy`)
+
+The Arduino keeps its program when unplugged. A Nano that already works does **not** need to be programmed
+again on the new laptop, so the Arduino IDE is only needed to change the sketch.
+
+## Step 1: Copy the project folder
+
+Use either way:
+
+- **USB stick:** copy the whole `SDR_Radar_Deploy` folder (about 35 MB, it includes the drivers) to the
+  new laptop, e.g. to `Documents`.
+- **GitHub:** open the repository page, click **Code → Download ZIP**, unzip it, and open
+  `SDR_Radar_Deploy`. With Git installed you can instead run
+  `git clone <repository URL>`.
+
+Keep all the files together. `START_RADAR.bat` needs the `.py` files, `drivers/` and `speed_alarm/`
+next to it.
+
+## Step 2: Install Python
+
+1. Download **Python 3.10 or newer** from <https://www.python.org/downloads/>.
+2. Run the installer and tick **"Add python.exe to PATH"** on the first screen, then click **Install Now**.
+
+If you skip this, `START_RADAR.bat` tells you and opens the download page.
+
+## Step 3: First run of the launcher
+
+1. **Do not plug in the Pluto yet.**
+2. Double-click **`START_RADAR.bat`**. On the first run it:
+   - installs the Python packages (needs internet, about 2 minutes)
+   - sees that the Pluto driver (libiio) is missing and asks you to keep the Pluto unplugged, then runs
+     the two driver installers from `drivers/`. Accept the Windows admin prompts and click through
+     with the default options.
+3. When it says `PlutoSDR not found`, plug the Pluto into its **middle** micro-USB port (USB symbol,
+   not the power port). Wait about 30 seconds until the **Ready** LED is on and a `PlutoSDR` drive
+   appears, then press a key. The radar starts, and the window shows:
+
+   ```
+   PlutoSDR : connected
+   Arduino  : COM5          (any COM number)
+   ```
+
+If the driver installers did not run, double-click `TOOLS.bat` and choose **6**.
+
+## Step 4: Connect the Arduino (optional)
+
+Plug in the Nano. If the launcher shows `Arduino : not found`:
+
+- Clone Nanos need the **CH340 driver**: download `CH341SER.EXE` from <https://www.wch-ic.com>, install
+  it, then unplug and replug the Nano.
+- Some USB cables only charge. Try another cable.
+
+## Step 5: Run
+
+Double-click **`START_RADAR.bat`**. The radar starts by itself with speed limit 50 km/h. To change the
+limit, open `START_RADAR.bat` in Notepad and edit `set "LIMIT=50"` near the top.
+
+To test or for walking demos, double-click **`TOOLS.bat`**:
+
+| TOOLS.bat option | Expected result |
+|---|---|
+| **3** Test the Pluto | Plot with a strong peak at **+100 kHz**. Close the window. |
+| **4** Test the Arduino display | Display shows `15`, `35`, then `72` blinking |
+| **1** Run radar (walking) | Walk toward the antennas: speed on screen and LED, beeps from the laptop; captures over 10 km/h |
+| **2** Run radar (cars) | Same as `START_RADAR.bat`: captures over 50 km/h |
+
+The LED shows whole km/h (`45`); the screen and the log show one decimal (`45.3`).
+
+Close the radar's plot window to stop it. The terminal then shows `Radar stopped. TX is off.`
+
+## Programming a new Nano (only if needed)
+
+1. Install **Arduino IDE 2** from <https://www.arduino.cc/en/software> and close it after the first start.
+2. Wire the Nano (see `README.md`, section "Arduino buzzer + LED display").
+3. Double-click `TOOLS.bat` and choose **5**. It installs the board support and the TM1637 library and uploads
+   the sketch. Success: the display shows `88:88`, then `----`.
+
+## Antenna placement
+
+```
+Pluto Tx -- antenna, upright
+Pluto Rx -- extension cable (0.5-1 m) -- antenna, upright
+```
+
+- Point both antennas along the path of the target. Speed is measured along the line of sight, so a car
+  passing at an angle reads lower.
+- No ceiling fans or moving objects in front of the antennas.
+- `CLIPPING` on screen: move the antennas further apart.
+
+## Common problems
+
+| Problem | Fix |
+|---|---|
+| `Python is not installed` | Step 2. Tick "Add python.exe to PATH", then open the launcher again |
+| `ERROR: installing the Python packages failed` | Check the internet connection and run the launcher again |
+| `PlutoSDR : NOT FOUND` | Middle USB port, wait 30 s, close other radar windows, `TOOLS.bat` option 6 for drivers |
+| `Arduino : not found` | CH340 driver, other USB cable (Step 4) |
+| `Cannot open Arduino port` / `Access is denied` | Close the Arduino IDE and its Serial Monitor |
+| Speeds appear with nobody moving | Fans or moving objects in view; point the antennas elsewhere |

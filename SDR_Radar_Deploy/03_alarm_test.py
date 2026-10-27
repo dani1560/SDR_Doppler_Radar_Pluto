@@ -5,7 +5,8 @@ Sends simulated passes to the Arduino Nano so you can check the buzzer and LED d
   1. slow, far   -> quiet, slow beeps
   2. medium      -> louder, faster beeps
   3. fast, close -> loudest, highest pitch, fastest beeps
-After each pass the LED display should hold that pass's speed.
+After each pass the LED display should hold that pass's speed (one decimal, e.g. 15.0);
+the fast pass is over the limit, so its speed blinks (captured).
 
 Run:  python 03_alarm_test.py COM5      (or: python 03_alarm_test.py auto)
 (Close the Arduino IDE Serial Monitor first.)
@@ -18,13 +19,14 @@ MAX_KMH = 60
 PASSES = [            # (description, peak speed km/h, peak proximity %)
     ("slow and far", 15, 20),
     ("medium", 35, 60),
-    ("fast and close", 70, 100),
+    ("fast and close", 72.4, 100),
 ]
 
 
 def send(port, kmh, proximity, last):
     volume = min(max(kmh / MAX_KMH, 0.1), 1.0) * 100 if proximity > 0 else 0
-    port.write(f"S{kmh:.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f}\n".encode())
+    captured = int(last > MAX_KMH)                  # over the limit: the display blinks the held speed
+    port.write(f"S{kmh:.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f},F{captured}\n".encode())
 
 
 def main():
@@ -54,11 +56,12 @@ def main():
                 send(port, peak_kmh * (0.8 + 0.2 * f), peak_prox * f, last)
                 time.sleep(0.05)
             last = float(peak_kmh)
-            print(f"  passed -> display should hold {peak_kmh}")
+            note = "  (over the limit: blinking)" if last > MAX_KMH else ""
+            print(f"  passed -> display should hold {last:.1f}{note}")
             for _ in range(60):          # 3 s quiet: display holds last speed
                 send(port, 0, 0, last)
                 time.sleep(0.05)
-        print("Done. Display should show", int(last))
+        print(f"Done. Display should show {last:.1f} (blinking)")
     finally:
         port.close()
 

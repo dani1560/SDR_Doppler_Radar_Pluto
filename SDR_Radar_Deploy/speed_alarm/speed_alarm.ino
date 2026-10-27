@@ -2,8 +2,8 @@
   Speed alarm + LED speed display for the SDR Doppler radar - Arduino Nano.
 
   Receives lines from 02_doppler_radar.py over USB serial (115200 baud):
-      S<speed km/h>,P<proximity 0-100>,V<volume 0-100>,L<last speed km/h, -1 = none>
-  e.g. "S45.2,P70,V75,L38.0"
+      S<speed km/h>,P<proximity 0-100>,V<volume 0-100>,L<last speed km/h, -1 = none>,F<1 = last pass over limit>
+  e.g. "S45.2,P70,V75,L38.0,F0"
 
   Buzzer behaviour:
     - volume (PWM duty cycle)  follows speed     -> faster target = louder
@@ -11,10 +11,15 @@
     - beep rate (1..10 /s)     follows proximity -> closer target = faster beeps
     - silent when no target, or when no data arrives for 0.5 s
 
-  LED display (TM1637, 4 digits):
+  LED display (TM1637, 4 digits), speed with one decimal:
+    - modules with decimal points (HAS_DOTS = true): " 45.3", "123.4"
+    - colon-only modules (HAS_DOTS = false): whole km/h, "  45"; with COLON_AS_POINT = true
+      the colon is used as the decimal point, "45:3"
     - live speed while a target is passing
-    - holds the LAST measured speed after it has passed
+    - holds the LAST measured speed (peak of the pass) after it has passed
+    - blinks the held speed if that pass was over the speed limit (captured)
     - "----" until the first pass
+    Start-up test lights all segments, colon and dots: "88:88" means a colon module.
 
   Wiring:
     Buzzer (D9 is fixed: it is Timer1's PWM output OC1A)
@@ -38,19 +43,25 @@ const uint8_t DISP_CLK = 2;
 const uint8_t DISP_DIO = 3;
 const uint8_t LED_PIN = LED_BUILTIN;   // on-board LED blinks with the beeps
 const unsigned long TIMEOUT_MS = 500;
+const bool HAS_DOTS = false;           // true for modules with decimal points, false for colon-only modules
+const bool COLON_AS_POINT = false;     // colon-only modules: true = "45:3", false = whole km/h "  45"
+const uint8_t DOT_000_0 = 0b00100000;  // decimal point after the 3rd digit
+const uint8_t COLON = 0b10000000;      // colon modules: this bit of the 2nd digit lights the colon
+const int BLANK = -2;                  // showTenths(): -1 = dashes, -2 = blank
 
 TM1637Display display(DISP_CLK, DISP_DIO);
 const uint8_t DASHES[] = {SEG_G, SEG_G, SEG_G, SEG_G};
 
 float speedKmh = 0;
-float lastKmh = -1;  // -1 = no pass yet
-int proximity = 0;   // 0..100
-int volume = 0;      // 0..100
+float lastKmh = -1;     // -1 = no pass yet
+bool overLimit = false; // last pass was over the speed limit
+int proximity = 0;      // 0..100
+int volume = 0;         // 0..100
 
-char line[40];
+char line[48];
 uint8_t lineLen = 0;
 unsigned long lastMsgMs = 0;
-int shown = -2;      // value currently on the display (avoids redundant writes)
+int shown = -3;         // value currently on the display (avoids redundant writes)
 
 // Timer1 fast PWM on D9: frequency = pitch, duty cycle = loudness
 void buzzerOn(float pitchHz, int vol) {
@@ -69,22 +80,40 @@ void buzzerOff() {
   digitalWrite(BUZZER_PIN, LOW);
 }
 
-// Show a speed rounded to whole km/h, or dashes for a negative value
-void showSpeed(float kmh) {
-  int value = kmh < 0 ? -1 : (int)(kmh + 0.5);
-  if (value == shown) return;
-  shown = value;
-  if (value < 0) display.setSegments(DASHES);
-  else display.showNumberDec(min(value, 9999), false);
+// Speed in km/h -> tenths of km/h (45.3 -> 453), -1 for "no speed"
+int toTenths(float kmh) {
+  return kmh < 0 ? -1 : (int)min(kmh * 10 + 0.5, 9999.0);
 }
 
-// Parse "S45.2,P70,V75,L38.0"
+// Colon module: "45:3" with the colon as decimal point (digits 1-2 whole km/h, digit 3 tenths)
+void showColonDecimal(int value) {
+  int whole = value / 10;
+  uint8_t seg[4] = {0, 0, 0, 0};
+  if (whole >= 10) seg[0] = display.encodeDigit(whole / 10);
+  seg[1] = display.encodeDigit(whole % 10) | COLON;
+  seg[2] = display.encodeDigit(value % 10);
+  display.setSegments(seg);
+}
+
+// Show tenths of km/h as "45:3" / "45.3", dashes for -1, nothing for BLANK
+void showTenths(int value) {
+  if (value == shown) return;
+  shown = value;
+  if (value == BLANK) display.clear();
+  else if (value < 0) display.setSegments(DASHES);
+  else if (HAS_DOTS) display.showNumberDecEx(value, DOT_000_0, false);
+  else if (COLON_AS_POINT && value < 1000) showColonDecimal(value);
+  else display.showNumberDec((value + 5) / 10, false);   // whole km/h
+}
+
+// Parse "S45.2,P70,V75,L38.0,F0"
 void parseLine(char *s) {
   for (char *tok = strtok(s, ","); tok; tok = strtok(NULL, ",")) {
     if (tok[0] == 'S') speedKmh = atof(tok + 1);
     else if (tok[0] == 'P') proximity = constrain(atoi(tok + 1), 0, 100);
     else if (tok[0] == 'V') volume = constrain(atoi(tok + 1), 0, 100);
     else if (tok[0] == 'L') lastKmh = atof(tok + 1);
+    else if (tok[0] == 'F') overLimit = atoi(tok + 1) != 0;
   }
   lastMsgMs = millis();
 }
@@ -109,11 +138,11 @@ void setup() {
   Serial.begin(115200);
 
   display.setBrightness(7);       // 0..7
-  display.showNumberDec(8888);    // display test
+  display.showNumberDecEx(8888, 0b11100000);  // display test: "8.8.8.8." (or "88:88" on colon modules)
   buzzerOn(1000, 60);             // start-up chirp: buzzer wired correctly
-  delay(300);
+  delay(1000);
   buzzerOff();
-  showSpeed(-1);
+  showTenths(-1);
 }
 
 void loop() {
@@ -121,8 +150,10 @@ void loop() {
 
   bool active = volume > 0 && proximity > 0 && millis() - lastMsgMs < TIMEOUT_MS;
 
-  // Display: live speed during a pass, otherwise hold the last speed
-  showSpeed(active ? speedKmh : lastKmh);
+  // Display: live speed during a pass, otherwise hold the last speed (blinking if it was over the limit)
+  if (active) showTenths(toTenths(speedKmh));
+  else if (overLimit && lastKmh >= 0 && (millis() / 300) % 2) showTenths(BLANK);
+  else showTenths(toTenths(lastKmh));
 
   if (!active) {
     buzzerOff();
