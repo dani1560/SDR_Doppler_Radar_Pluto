@@ -1,4 +1,4 @@
-pyadi-iio>=0.0.17
+pyadi-iio==0.0.21
 pylibiio==0.25
 numpy
 scipy

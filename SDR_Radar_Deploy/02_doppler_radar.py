@@ -10,27 +10,31 @@ Run:
   python 02_doppler_radar.py                    # laptop-speaker alarm
   python 02_doppler_radar.py --max-kmh 10       # bench test (hand / walking)
   python 02_doppler_radar.py --port COM5        # also send speed to Arduino Nano
+  python 02_doppler_radar.py --port auto        # find the Arduino's COM port automatically
   python 02_doppler_radar.py --no-sound         # display only
-  python 02_doppler_radar.py --rx-gain 30       # if "CLIPPING" is shown
-Close the plot window to stop.
+  python 02_doppler_radar.py --rx-gain 20       # if "CLIPPING" is shown
+Close the plot window (or press Ctrl+C) to stop. TX is always switched off on exit.
 """
 import argparse
+import signal
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal
+from scipy import signal as dsp
 import adi
 
 C = 3e8
 
 # --- Radar settings ---
 PLUTO_URI   = "ip:192.168.2.1"
-CENTER_FREQ = 2.482e9     # Hz, top of the 2.4 GHz ISM band, above the Wi-Fi channels
+CENTER_FREQ = 2.482e9     # Hz, top of the 2.4 GHz ISM band (upper edge of Wi-Fi channel 13)
 SAMPLE_RATE = 1_000_000   # Pluto sample rate
 TONE_HZ     = 100e3       # TX tone offset (keeps the signal away from RX DC offset)
 TX_GAIN_DB  = -10         # TX attenuation (0 = max power)
+TX_OFF_DB   = -89         # TX attenuation used on exit (mutes the LO leakage too)
 RX_GAIN_DB  = 30          # RX gain (0..70); lower it if "CLIPPING" appears
 DECIM_1, DECIM_2 = 25, 5  # 1 MS/s -> 40 kS/s -> 8 kS/s
 FS_DOPPLER  = SAMPLE_RATE / (DECIM_1 * DECIM_2)
@@ -38,8 +42,8 @@ RX_BLOCK    = DECIM_1 * DECIM_2 * 512   # 64000 samples = 64 ms per read
 NFFT        = 4096        # 0.5 s window -> ~2 Hz bins -> ~0.12 m/s resolution
 
 # --- Detection settings ---
-MIN_DOPPLER_HZ = 15       # ignore |fd| below this (TX leakage, ~0.3 m/s)
-MAX_DOPPLER_HZ = 1000     # display/search limit (~225 km/h)
+MIN_DOPPLER_HZ = 15       # ignore |fd| below this (TX leakage, ~0.9 m/s = 3.3 km/h)
+MAX_DOPPLER_HZ = 1000     # display/search limit (~218 km/h)
 DETECT_DB      = 15       # peak must be this far above the noise floor
 STRONG_DB      = 40       # SNR treated as "very close" (proximity 100 %)
 MIRROR_DB      = 6        # peak must beat its mirror (-fd) by this much; rejects fans / vibration
@@ -61,13 +65,13 @@ class Downconverter:
     def __init__(self):
         # RX_BLOCK holds a whole number of tone periods, so one mixer table keeps phase continuous
         self.mixer = np.exp(-2j * np.pi * TONE_HZ * np.arange(RX_BLOCK) / SAMPLE_RATE)
-        self.h2 = signal.firwin(101, 3.5e3, fs=SAMPLE_RATE / DECIM_1)
+        self.h2 = dsp.firwin(101, 3.5e3, fs=SAMPLE_RATE / DECIM_1)
         self.z2 = np.zeros(len(self.h2) - 1, complex)
 
     def __call__(self, x):
         x = x * self.mixer
         y = x.reshape(-1, DECIM_1).mean(axis=1)     # stage 1: block average (nulls at multiples of 40 kHz)
-        y, self.z2 = signal.lfilter(self.h2, 1, y, zi=self.z2)
+        y, self.z2 = dsp.lfilter(self.h2, 1, y, zi=self.z2)
         return y[::DECIM_2]
 
 
@@ -106,16 +110,8 @@ class AudioAlarm:
         self.stream.close()
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--port", help="Arduino serial port, e.g. COM5")
-    ap.add_argument("--max-kmh", type=float, default=60, help="speed at which the alarm is loudest")
-    ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
-    ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
-    ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")
-    args = ap.parse_args()
-
-    # --- Pluto setup ---
+def start_pluto(args):
+    """Configure the Pluto and start the cyclic CW transmission."""
     sdr = adi.Pluto(PLUTO_URI)
     sdr.sample_rate = SAMPLE_RATE
     sdr.rx_lo = int(CENTER_FREQ)
@@ -126,22 +122,43 @@ def main():
     sdr.rx_hardwaregain_chan0 = args.rx_gain
     sdr.tx_hardwaregain_chan0 = args.tx_gain
     sdr.rx_buffer_size = RX_BLOCK
+    return sdr
 
-    n = np.arange(RX_BLOCK)
-    sdr.tx_cyclic_buffer = True
-    sdr.tx(0.5 * np.exp(2j * np.pi * TONE_HZ * n / SAMPLE_RATE) * 2**14)
-    time.sleep(1)
-    print(f"Radar running at {CENTER_FREQ/1e9:.2f} GHz, Doppler rate {FS_DOPPLER:.0f} Hz, "
-          f"resolution {doppler_to_kmh(FS_DOPPLER / NFFT):.2f} km/h")
 
-    alarm = None if args.no_sound else AudioAlarm()
-    arduino = None
-    if args.port:
-        import serial
-        arduino = serial.Serial(args.port, 115200, timeout=0)
-        time.sleep(2)                                   # Nano resets when the port opens
-        print(f"Sending speed to Arduino on {args.port}")
+def stop_pluto(sdr):
+    """Stop TX and mute the transmitter, even if one of the steps fails."""
+    for step in (lambda: sdr.tx_destroy_buffer(),
+                 lambda: setattr(sdr, "tx_hardwaregain_chan0", TX_OFF_DB),
+                 lambda: sdr.rx_destroy_buffer()):
+        try:
+            step()
+        except Exception as e:
+            print(f"Warning while stopping the Pluto: {e}")
 
+
+def open_arduino(port):
+    import serial
+    try:
+        arduino = serial.Serial(port, 115200, timeout=0)
+    except serial.SerialException as e:
+        sys.exit(f"Cannot open Arduino port {port}: {e}\n"
+                 f"Check the COM port, and close the Arduino IDE / Serial Monitor.")
+    time.sleep(2)                                   # Nano resets when the port opens
+    print(f"Sending speed to Arduino on {port}")
+    return arduino
+
+
+def log_pass(kmh):
+    """Append one pass to the CSV log and return its time string."""
+    now = datetime.now()
+    direction = "approaching" if kmh > 0 else "receding"
+    with LOG_FILE.open("a") as fh:
+        fh.write(f"{now:%Y-%m-%d},{now:%H:%M:%S},{abs(kmh):.1f},{direction}\n")
+    print(f"[{now:%H:%M:%S}] pass: {abs(kmh):.1f} km/h {direction}")
+    return f"{now:%H:%M:%S}"
+
+
+def run_radar(sdr, alarm, arduino, args):
     down = Downconverter()
     history = np.zeros(NFFT, complex)
     window = np.hanning(NFFT)
@@ -150,13 +167,14 @@ def main():
     recent = []
     hits = 0
     pass_peak, pass_frames, lost_frames = 0.0, 0, 0     # current pass
-    last_kmh, last_time = None, ""                       # last completed pass
+    last_kmh = None                                      # last completed pass
     if not LOG_FILE.exists():
         LOG_FILE.write_text("date,time,speed_kmh,direction\n")
 
     # --- Display ---
     plt.ion()
     fig, (ax_spec, ax_txt) = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1.6]})
+    fig.canvas.manager.set_window_title("SDR Doppler Radar - close this window to stop")
     show = np.abs(freqs) <= MAX_DOPPLER_HZ
     kmh_axis = doppler_to_kmh(freqs[show])
     line, = ax_spec.plot(kmh_axis, np.zeros(show.sum()))
@@ -194,7 +212,8 @@ def main():
             if hits >= CONFIRM_FRAMES:
                 recent = (recent + [doppler_to_kmh(freqs[k])])[-3:]
                 kmh = float(np.median(recent))
-                proximity = float(np.clip((snr - DETECT_DB) / (STRONG_DB - DETECT_DB), 0, 1) * 100)
+                # at least 1 %: proximity > 0 is what marks a confirmed target below
+                proximity = float(np.clip((snr - DETECT_DB) / (STRONG_DB - DETECT_DB), 0.01, 1) * 100)
                 direction = "APPROACHING" if kmh > 0 else "RECEDING"
                 msg = f"{abs(kmh):6.1f} km/h  {direction}\nsignal {snr:4.1f} dB  proximity {proximity:3.0f}%"
                 color = "red" if abs(kmh) >= args.max_kmh else "black"
@@ -215,12 +234,8 @@ def main():
                 lost_frames += 1
                 if lost_frames >= PASS_END_FRAMES:
                     if pass_frames >= PASS_MIN_FRAMES:
-                        now = datetime.now()
-                        last_kmh, last_time = pass_peak, now.strftime("%H:%M:%S")
-                        direction = "approaching" if last_kmh > 0 else "receding"
-                        with LOG_FILE.open("a") as fh:
-                            fh.write(f"{now:%Y-%m-%d},{last_time},{abs(last_kmh):.1f},{direction}\n")
-                        print(f"[{last_time}] pass: {abs(last_kmh):.1f} km/h {direction}")
+                        last_kmh = pass_peak
+                        last_time = log_pass(last_kmh)
                         last_txt.set_text(f"LAST SPEED: {abs(last_kmh):.1f} km/h  "
                                           f"{'→' if last_kmh > 0 else '←'}  ({last_time})")
                     pass_peak, pass_frames, lost_frames = 0.0, 0, 0
@@ -238,14 +253,57 @@ def main():
             speed_txt.set_color(color)
             plt.pause(0.001)
     finally:
-        sdr.tx_destroy_buffer()
-        sdr.rx_destroy_buffer()
+        if pass_frames >= PASS_MIN_FRAMES:              # pass still in progress when stopped
+            last_kmh = pass_peak
+            log_pass(last_kmh)
+        if arduino:                                     # silence the buzzer, keep the last speed shown
+            last = abs(last_kmh) if last_kmh is not None else -1
+            arduino.write(f"S0,P0,V0,L{last:.1f}\n".encode())
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", help="Arduino serial port, e.g. COM5, or 'auto' to find it")
+    ap.add_argument("--max-kmh", type=float, default=60, help="speed at which the alarm is loudest")
+    ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
+    ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
+    ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")
+    args = ap.parse_args()
+
+    port = args.port
+    if port and port.lower() == "auto":
+        from arduino_port import find_arduino_port
+        port = find_arduino_port()
+        print(f"Arduino found on {port}" if port else "No Arduino found - running without the LED display")
+
+    # Closing the console window raises SIGBREAK on Windows: turn it into Ctrl+C so cleanup still runs
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
+
+    sdr = alarm = arduino = None
+    try:
+        if port:
+            arduino = open_arduino(port)
+        if not args.no_sound:
+            alarm = AudioAlarm()
+        sdr = start_pluto(args)
+        n = np.arange(RX_BLOCK)
+        sdr.tx_cyclic_buffer = True
+        sdr.tx(0.5 * np.exp(2j * np.pi * TONE_HZ * n / SAMPLE_RATE) * 2**14)
+        time.sleep(1)
+        print(f"Radar running at {CENTER_FREQ/1e9:.3f} GHz, Doppler rate {FS_DOPPLER:.0f} Hz, "
+              f"resolution {doppler_to_kmh(FS_DOPPLER / NFFT):.2f} km/h")
+        run_radar(sdr, alarm, arduino, args)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if sdr:
+            stop_pluto(sdr)
         if alarm:
             alarm.close()
         if arduino:
-            arduino.write(b"S0,P0,V0,L-1\n")
             arduino.close()
-        print("Radar stopped.")
+        print("Radar stopped. TX is off.")
 
 
 if __name__ == "__main__":

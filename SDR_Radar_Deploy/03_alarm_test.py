@@ -7,7 +7,7 @@ Sends simulated passes to the Arduino Nano so you can check the buzzer and LED d
   3. fast, close -> loudest, highest pitch, fastest beeps
 After each pass the LED display should hold that pass's speed.
 
-Run:  python 03_alarm_test.py COM5
+Run:  python 03_alarm_test.py COM5      (or: python 03_alarm_test.py auto)
 (Close the Arduino IDE Serial Monitor first.)
 """
 import sys
@@ -29,10 +29,20 @@ def send(port, kmh, proximity, last):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python 03_alarm_test.py COM5")
+        print("Usage: python 03_alarm_test.py COM5   (or 'auto')")
         sys.exit(1)
 
-    port = serial.Serial(sys.argv[1], 115200, timeout=0)
+    name = sys.argv[1]
+    if name.lower() == "auto":
+        from arduino_port import find_arduino_port
+        name = find_arduino_port()
+        if not name:
+            sys.exit("No Arduino found. Is the Nano plugged in (and the CH340 driver installed)?")
+        print(f"Arduino found on {name}")
+    try:
+        port = serial.Serial(name, 115200, timeout=0)
+    except serial.SerialException as e:
+        sys.exit(f"Cannot open {name}: {e}\nClose the Arduino IDE / Serial Monitor and try again.")
     time.sleep(2)                       # Nano resets when the port opens (8888 + chirp)
     last = -1.0
 

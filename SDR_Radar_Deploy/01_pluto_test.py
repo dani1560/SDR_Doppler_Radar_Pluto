@@ -17,8 +17,8 @@ CENTER_FREQ = 2.482e9     # Hz, top of the 2.4 GHz ISM band, above the Wi-Fi cha
 SAMPLE_RATE = 1e6         # samples/s
 TONE_HZ     = 100e3       # TX tone offset from the carrier (avoids DC/LO leakage at 0 Hz)
 TX_GAIN_DB  = -10         # TX attenuation in dB (0 = max power, -89 = min)
-RX_GAIN_DB  = 50          # RX gain in dB (0..70)
-N_SAMPLES   = 2**14
+RX_GAIN_DB  = 30          # RX gain in dB (0..70); 40+ saturates with the antennas close together
+N_SAMPLES   = 16000      # whole number of tone periods, so the cyclic TX buffer has no phase jump
 
 # --- Connect and configure ---
 sdr = adi.Pluto(PLUTO_URI)
@@ -33,27 +33,27 @@ sdr.tx_hardwaregain_chan0 = TX_GAIN_DB
 sdr.rx_buffer_size = N_SAMPLES
 print(f"Connected to Pluto at {PLUTO_URI}")
 
-# --- Start continuous CW transmission ---
-n = np.arange(N_SAMPLES)
-tone = 0.5 * np.exp(2j * np.pi * TONE_HZ * n / SAMPLE_RATE) * 2**14
-sdr.tx_cyclic_buffer = True
-sdr.tx(tone)
-time.sleep(1)             # let TX start before reading RX
-print(f"Transmitting CW at {(CENTER_FREQ + TONE_HZ)/1e9:.4f} GHz")
-
-# --- Live spectrum ---
-freqs = np.fft.fftshift(np.fft.fftfreq(N_SAMPLES, 1 / SAMPLE_RATE)) / 1e3
-window = np.hanning(N_SAMPLES)
-plt.ion()
-fig, ax = plt.subplots(figsize=(10, 5))
-line, = ax.plot(freqs, np.zeros(N_SAMPLES))
-ax.set_xlabel("Frequency offset (kHz)")
-ax.set_ylabel("Power (dBFS)")
-ax.set_ylim(-120, 0)
-ax.grid(True)
-title = ax.set_title("")
-
 try:
+    # --- Start continuous CW transmission ---
+    n = np.arange(N_SAMPLES)
+    tone = 0.5 * np.exp(2j * np.pi * TONE_HZ * n / SAMPLE_RATE) * 2**14
+    sdr.tx_cyclic_buffer = True
+    sdr.tx(tone)
+    time.sleep(1)             # let TX start before reading RX
+    print(f"Transmitting CW at {(CENTER_FREQ + TONE_HZ)/1e9:.4f} GHz")
+
+    # --- Live spectrum ---
+    freqs = np.fft.fftshift(np.fft.fftfreq(N_SAMPLES, 1 / SAMPLE_RATE)) / 1e3
+    window = np.hanning(N_SAMPLES)
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(10, 5))
+    line, = ax.plot(freqs, np.zeros(N_SAMPLES))
+    ax.set_xlabel("Frequency offset (kHz)")
+    ax.set_ylabel("Power (dBFS)")
+    ax.set_ylim(-120, 0)
+    ax.grid(True)
+    title = ax.set_title("")
+
     while plt.fignum_exists(fig.number):
         rx = sdr.rx() / 2**11
         spec = np.fft.fftshift(np.fft.fft(rx * window)) / (N_SAMPLES * window.mean())
@@ -63,7 +63,10 @@ try:
         title.set_text(f"Peak: {freqs[peak]:.1f} kHz at {p_db[peak]:.1f} dBFS "
                        f"(expected +{TONE_HZ/1e3:.0f} kHz)")
         plt.pause(0.05)
+except KeyboardInterrupt:
+    pass
 finally:
     sdr.tx_destroy_buffer()
+    sdr.tx_hardwaregain_chan0 = -89     # mute the TX LO leakage as well
     sdr.rx_destroy_buffer()
     print("TX stopped.")
