@@ -1,0 +1,561 @@
+options:
+  parameters:
+    author: SDR Doppler Radar Project Team
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: CW Doppler radar and speed camera on the ADALM-PLUTO
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: doppler_radar
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: SDR Doppler Radar - Speed Camera (PlutoSDR)
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 8
+    rotation: 0
+    state: enabled
+blocks:
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: '1000000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 184
+    - 12
+    rotation: 0
+    state: enabled
+- name: tone_hz
+  id: variable
+  parameters:
+    comment: ''
+    value: '100000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 280
+    - 12
+    rotation: 0
+    state: enabled
+- name: fs_doppler
+  id: variable
+  parameters:
+    comment: ''
+    value: '8000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 376
+    - 12
+    rotation: 0
+    state: enabled
+- name: arduino_port
+  id: variable
+  parameters:
+    comment: ''
+    value: '''auto'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 488
+    - 12
+    rotation: 0
+    state: enabled
+- name: pluto_uri
+  id: variable
+  parameters:
+    comment: ''
+    value: '''ip:192.168.2.1'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 600
+    - 12
+    rotation: 0
+    state: enabled
+- name: freq_mhz
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    label: Frequency (MHz)
+    value: '2482'
+    start: '2400'
+    stop: '2483'
+    step: '1'
+    widget: counter_slider
+    rangeType: float
+    orient: QtCore.Qt.Horizontal
+    min_len: '200'
+    outputmsgname: value
+    showports: 'False'
+    gui_hint: 0,0,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 100
+    rotation: 0
+    state: enabled
+- name: max_kmh
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    label: Max speed (km/h)
+    value: '220'
+    start: '10'
+    stop: '740'
+    step: '10'
+    widget: counter_slider
+    rangeType: float
+    orient: QtCore.Qt.Horizontal
+    min_len: '200'
+    outputmsgname: value
+    showports: 'False'
+    gui_hint: 0,1,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 200
+    - 100
+    rotation: 0
+    state: enabled
+- name: limit_kmh
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    label: Speed limit - capture above (km/h)
+    value: '50'
+    start: '5'
+    stop: '300'
+    step: '5'
+    widget: counter_slider
+    rangeType: float
+    orient: QtCore.Qt.Horizontal
+    min_len: '200'
+    outputmsgname: value
+    showports: 'False'
+    gui_hint: 1,0,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 392
+    - 100
+    rotation: 0
+    state: enabled
+- name: rx_gain
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    label: RX gain (dB)
+    value: '30'
+    start: '0'
+    stop: '70'
+    step: '1'
+    widget: counter_slider
+    rangeType: float
+    orient: QtCore.Qt.Horizontal
+    min_len: '200'
+    outputmsgname: value
+    showports: 'False'
+    gui_hint: 1,1,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 584
+    - 100
+    rotation: 0
+    state: enabled
+- name: tx_atten
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    label: TX attenuation (dB, 0 = max power)
+    value: '10'
+    start: '0'
+    stop: '89'
+    step: '1'
+    widget: counter_slider
+    rangeType: float
+    orient: QtCore.Qt.Horizontal
+    min_len: '200'
+    outputmsgname: value
+    showports: 'False'
+    gui_hint: 2,0,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 776
+    - 100
+    rotation: 0
+    state: enabled
+- name: info
+  id: variable_qtgui_label
+  parameters:
+    comment: ''
+    label: 'Radar:  '
+    value: '''%.0f MHz | resolution %.2f km/h | max possible %.0f km/h'' % (freq_mhz, 1.953125*3e8/(2*freq_mhz*1e6)*3.6, 3400*3e8/(2*freq_mhz*1e6)*3.6)'
+    type: string
+    formatter: None
+    gui_hint: 2,1,1,1
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 968
+    - 100
+    rotation: 0
+    state: enabled
+- name: analog_sig_source_x_0
+  id: analog_sig_source_x
+  parameters:
+    comment: ''
+    type: complex
+    samp_rate: samp_rate
+    waveform: analog.GR_COS_WAVE
+    freq: tone_hz
+    amp: '0.5'
+    offset: '0'
+    phase: '0'
+    showports: 'False'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 260
+    rotation: 0
+    state: enabled
+- name: iio_pluto_sink_0
+  id: iio_pluto_sink
+  parameters:
+    comment: ''
+    type: fc32
+    uri: pluto_uri
+    frequency: int(freq_mhz*1e6)
+    samplerate: samp_rate
+    buffer_size: '32768'
+    cyclic: 'False'
+    attenuation1: tx_atten
+    len_tag_key: ''''''
+    filter_source: '''Auto'''
+    filter: ''''''
+    fpass: '0'
+    fstop: '0'
+    bandwidth: samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 248
+    - 236
+    rotation: 0
+    state: enabled
+- name: iio_pluto_source_0
+  id: iio_pluto_source
+  parameters:
+    comment: ''
+    type: fc32
+    uri: pluto_uri
+    frequency: int(freq_mhz*1e6)
+    samplerate: samp_rate
+    buffer_size: '32768'
+    quadrature: 'True'
+    rfdc: 'True'
+    bbdc: 'True'
+    gain1: '''manual'''
+    manual_gain1: rx_gain
+    len_tag_key: ''''''
+    filter_source: '''Auto'''
+    filter: ''''''
+    fpass: '0'
+    fstop: '0'
+    bandwidth: samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 400
+    rotation: 0
+    state: enabled
+- name: freq_xlating_fir_filter_xxx_0
+  id: freq_xlating_fir_filter_xxx
+  parameters:
+    comment: ''
+    type: ccc
+    decim: '25'
+    taps: firdes.low_pass_2(1.0, samp_rate, 6000, 14000, 100)
+    center_freq: tone_hz
+    samp_rate: samp_rate
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 280
+    - 420
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_0
+  id: fir_filter_xxx
+  parameters:
+    comment: ''
+    type: ccc
+    decim: '5'
+    taps: firdes.low_pass_2(1.0, samp_rate/25, 3500, 500, 80)
+    samp_delay: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 560
+    - 420
+    rotation: 0
+    state: enabled
+- name: epy_block_0
+  id: epy_block
+  parameters:
+    comment: ''
+    _source_code: "\"\"\"\nDoppler Speed Camera - GNU Radio embedded Python block (source of the epy_block in doppler_radar.grc).\n\nInput : complex Doppler signal at 8 kS/s (the received CW tone mixed to 0 Hz and decimated).\nDisplay: live_text() and held_text() return the readouts; Function Probe blocks poll them for QT GUI Labels.\nProcessing is shared with the Python radar (../doppler_core.py): clutter map, mirror test,\nsub-bin peak, pass tracking, capture over the speed limit, speed_log.csv, Arduino LED/buzzer.\n\"\"\"\nimport os\nimport sys\nimport numpy as np\nfrom gnuradio import gr\n\n\ndef _import_core():\n    \"\"\"doppler_core.py lives in SDR_Radar_Deploy, one folder above this flowgraph.\"\"\"\n    try:\n        here = os.path.dirname(os.path.abspath(__file__))\n    except NameError:                                   # GRC loads the block source without __file__\n        here = os.getcwd()\n    for d in (here, os.path.dirname(here), os.getcwd(), os.path.dirname(os.getcwd())):\n\
+      \        if os.path.exists(os.path.join(d, \"doppler_core.py\")):\n            if d not in sys.path:\n                sys.path.insert(0, d)\n            import doppler_core\n            return doppler_core, d\n    raise ImportError(\"doppler_core.py not found: keep the gnuradio folder inside SDR_Radar_Deploy\")\n\n\nclass blk(gr.sync_block):\n    \"\"\"Doppler Speed Camera: speed in km/h, last-speed hold, capture over the limit, log, Arduino\"\"\"\n\n    def __init__(self, freq_mhz=2482.0, max_kmh=220.0, limit_kmh=50.0, alarm_kmh=60.0, arduino_port=\"auto\",\n                 pluto_uri=\"ip:192.168.2.1\"):\n        gr.sync_block.__init__(self, name=\"Doppler Speed Camera\", in_sig=[np.complex64], out_sig=None)\n        # GRC updates these attributes when the sliders move; work() applies them\n        self.freq_mhz, self.max_kmh, self.limit_kmh = freq_mhz, max_kmh, limit_kmh\n        self.alarm_kmh, self.arduino_port, self.pluto_uri = alarm_kmh, arduino_port, pluto_uri\n        self.dc,\
+      \ base = _import_core()\n        self.log_file = os.path.join(base, \"speed_log.csv\")\n        self.det = self.cam = None\n        self.applied = None\n        self.buf = np.zeros(0, np.complex64)\n        self.kmh = self.snr = 0.0                       # latest frame, for the display\n        self.arduino = None\n\n    # --- GNU Radio start/stop --------------------------------------------------------------------\n    def start(self):\n        self._apply_settings()\n        port = str(self.arduino_port).strip()\n        if port.lower() == \"auto\":\n            try:\n                from arduino_port import find_arduino_port\n                port = find_arduino_port() or \"\"\n            except ImportError:\n                port = \"\"\n        if port and port.lower() != \"none\":\n            try:\n                import serial\n                import time\n                self.arduino = serial.Serial(port, 115200, timeout=0)\n                time.sleep(2)                   \
+      \        # Nano resets when the port opens\n                print(f\"Doppler camera: sending speed to Arduino on {port}\")\n            except Exception as e:                      # radar keeps running without the display\n                print(f\"Doppler camera: Arduino on {port} not available ({e})\")\n                self.arduino = None\n        return True\n\n    def stop(self):\n        if self.cam:\n            self.cam.finish()                           # log a pass still in progress\n        if self.arduino:\n            try:\n                self.arduino.write(self.cam.arduino_line(0, 0, self.alarm_kmh).encode())\n                self.arduino.close()\n            except Exception:\n                pass\n            self.arduino = None\n        self._mute_tx()\n        return True\n\n    def _mute_tx(self):\n        \"\"\"The PlutoSDR Sink leaves the TX LO on when the flowgraph stops: set -89 dB so nothing radiates.\"\"\"\n        try:\n            import iio\n            phy\
+      \ = iio.Context(str(self.pluto_uri)).find_device(\"ad9361-phy\")\n            phy.find_channel(\"voltage0\", True).attrs[\"hardwaregain\"].value = \"-89\"\n            print(\"Doppler camera: transmitter muted (-89 dB)\")\n        except Exception as e:\n            print(f\"Doppler camera: could not mute the transmitter ({e})\")\n\n    # --- settings from the GUI sliders ------------------------------------------------------------\n    def _apply_settings(self):\n        fc = float(self.freq_mhz) * 1e6\n        settings = (fc, float(self.max_kmh), float(self.limit_kmh))\n        if settings == self.applied:\n            return\n        dc = self.dc\n        max_doppler = dc.kmh_to_doppler(min(float(self.max_kmh), dc.max_speed_kmh(fc)), fc)\n        if self.det is None:\n            self.det = dc.Detector(max_doppler)\n            self.cam = dc.SpeedCamera(fc, float(self.limit_kmh), self.log_file)\n        else:\n            if self.applied[0] != fc:\n                self.det.reset()\
+      \                        # new frequency: learn the background again\n            self.det.set_max_doppler(max_doppler)\n            self.cam.fc, self.cam.limit = fc, float(self.limit_kmh)\n        self.applied = settings\n        print(f\"Doppler camera: {fc / 1e6:g} MHz, speeds up to \"\n              f\"{dc.doppler_to_kmh(self.det.max_doppler_hz, fc):.0f} km/h \"\n              f\"(max possible {dc.max_speed_kmh(fc):.0f}), resolution \"\n              f\"{dc.doppler_to_kmh(dc.FS_DOPPLER / dc.NFFT, fc):.2f} km/h, limit {float(self.limit_kmh):g} km/h\")\n\n    # --- processing --------------------------------------------------------------------------------\n    def work(self, input_items, output_items):\n        self._apply_settings()\n        dc, n = self.dc, len(input_items[0])\n        self.buf = np.concatenate([self.buf, input_items[0]])\n        while len(self.buf) >= dc.FRAME:\n            frame, self.buf = self.buf[:dc.FRAME], self.buf[dc.FRAME:]\n            p_db, thr_db,\
+      \ noise_db, k, snr, confirmed = self.det(frame.astype(complex))\n            kmh, proximity, ended = self.cam.update(self.det, p_db, k, snr, confirmed)\n            self.kmh, self.snr = kmh, snr\n            if self.arduino:\n                try:\n                    self.arduino.write(self.cam.arduino_line(kmh, proximity, float(self.alarm_kmh)).encode())\n                except Exception:\n                    self.arduino = None\n        return n\n\n    # --- display (polled by Function Probe blocks) ---------------------------------------------------\n    def live_text(self):\n        if self.det is None or not self.det.ready:\n            return \"learning background ... stand still\"\n        if self.kmh == 0:\n            return \"no target\"\n        way = \"approaching\" if self.kmh > 0 else \"receding\"\n        flag = \"   OVER LIMIT\" if abs(self.kmh) > float(self.limit_kmh) else \"\"\n        return f\"{abs(self.kmh):.1f} km/h {way}   (signal {self.snr:.0f} dB){flag}\"\n\
+      \n    def held_text(self):\n        cam = self.cam\n        if cam is None or cam.last_kmh is None:\n            return \"--   (no pass yet)\"\n        way = \"approaching\" if cam.last_kmh > 0 else \"receding\"\n        tag = f\"   CAPTURED - OVER {float(self.limit_kmh):g} km/h\" if cam.last_captured else \"\"\n        return (f\"{abs(cam.last_kmh):.1f} km/h {way} at {cam.last_time}{tag}   |   \"\n                f\"top {cam.top_kmh:.1f} km/h, captured {cam.n_captured}\")\n"
+    freq_mhz: freq_mhz
+    max_kmh: max_kmh
+    limit_kmh: limit_kmh
+    alarm_kmh: max(limit_kmh, 10)
+    arduino_port: arduino_port
+    pluto_uri: pluto_uri
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 760
+    - 400
+    rotation: 0
+    state: enabled
+- name: live
+  id: variable_function_probe
+  parameters:
+    comment: ''
+    block_id: epy_block_0
+    function_name: live_text
+    function_args: ''
+    poll_rate: '5'
+    value: '''starting ...'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1040
+    - 380
+    rotation: 0
+    state: enabled
+- name: live_label
+  id: variable_qtgui_label
+  parameters:
+    comment: ''
+    label: 'LIVE SPEED:  '
+    value: live
+    type: string
+    formatter: None
+    gui_hint: 3,0,1,2
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1240
+    - 380
+    rotation: 0
+    state: enabled
+- name: held
+  id: variable_function_probe
+  parameters:
+    comment: ''
+    block_id: epy_block_0
+    function_name: held_text
+    function_args: ''
+    poll_rate: '5'
+    value: '''starting ...'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1040
+    - 460
+    rotation: 0
+    state: enabled
+- name: held_label
+  id: variable_qtgui_label
+  parameters:
+    comment: ''
+    label: 'LAST SPEED (held):  '
+    value: held
+    type: string
+    formatter: None
+    gui_hint: 4,0,1,2
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1240
+    - 460
+    rotation: 0
+    state: enabled
+- name: qtgui_freq_sink_x_0
+  id: qtgui_freq_sink_x
+  parameters:
+    comment: ''
+    type: complex
+    name: '''Doppler spectrum (Hz):  km/h = Hz x c / (2 fc) x 3.6'''
+    fftsize: '4096'
+    wintype: window.WIN_BLACKMAN_hARRIS
+    fc: '0'
+    bw: fs_doppler
+    ymin: '-140'
+    ymax: '-20'
+    grid: 'True'
+    autoscale: 'False'
+    average: '0.2'
+    update_time: '0.10'
+    nconnections: '1'
+    showports: 'False'
+    ctrlpanel: 'False'
+    legend: 'True'
+    axislabels: 'True'
+    fftavg: '1'
+    norm_window: 'False'
+    units: dB
+    gui_hint: 5,0,1,2
+    label: Relative Gain
+    label1: '''Doppler'''
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_level: '0.0'
+    tr_chan: '0'
+    tr_tag: ''''''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 760
+    - 560
+    rotation: 0
+    state: enabled
+- name: qtgui_waterfall_sink_x_0
+  id: qtgui_waterfall_sink_x
+  parameters:
+    comment: ''
+    type: complex
+    name: '''Doppler waterfall'''
+    fftsize: '1024'
+    wintype: window.WIN_BLACKMAN_hARRIS
+    fc: '0'
+    bw: fs_doppler
+    grid: 'False'
+    int_min: '-100'
+    int_max: '-20'
+    update_time: '0.10'
+    nconnections: '1'
+    showports: 'False'
+    legend: 'True'
+    axislabels: 'True'
+    gui_hint: 6,0,1,2
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 760
+    - 680
+    rotation: 0
+    state: enabled
+connections:
+- - analog_sig_source_x_0
+  - '0'
+  - iio_pluto_sink_0
+  - '0'
+- - iio_pluto_source_0
+  - '0'
+  - freq_xlating_fir_filter_xxx_0
+  - '0'
+- - freq_xlating_fir_filter_xxx_0
+  - '0'
+  - fir_filter_xxx_0
+  - '0'
+- - fir_filter_xxx_0
+  - '0'
+  - epy_block_0
+  - '0'
+- - fir_filter_xxx_0
+  - '0'
+  - qtgui_freq_sink_x_0
+  - '0'
+- - fir_filter_xxx_0
+  - '0'
+  - qtgui_waterfall_sink_x_0
+  - '0'
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

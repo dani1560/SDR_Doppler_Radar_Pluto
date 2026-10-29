@@ -14,8 +14,12 @@ rem --- Radar settings: change these if you like --------------------
 rem  LIMIT  = speed limit in km/h; faster passes are CAPTURED
 rem  MAXKMH = speed at which the alarm is loudest
 rem  For walking tests indoors use LIMIT=10 and MAXKMH=10.
+rem  FREQ_MHZ  = carrier frequency (2400-2483 with the 2.4 GHz antennas)
+rem  MAX_SPEED = highest speed searched in km/h (up to ~740 at 2482 MHz)
 set "LIMIT=50"
 set "MAXKMH=60"
+set "FREQ_MHZ=2482"
+set "MAX_SPEED=220"
 
 rem --- 1. Python --------------------------------------------------
 python --version >nul 2>&1
@@ -165,9 +169,9 @@ exit /b 0
 
 :run_radar
 if defined PORT (
-    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --port %PORT%
+    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED% --port %PORT%
 ) else (
-    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT%
+    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED%
 )
 exit /b 0
 

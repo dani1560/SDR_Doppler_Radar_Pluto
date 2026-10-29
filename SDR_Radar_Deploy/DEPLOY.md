@@ -1,7 +1,8 @@
 # Deploying the radar on another laptop
 
-This guide sets up the SDR Doppler radar on a new Windows 10/11 laptop. It takes about 15 minutes and
-needs an internet connection once, to install Python packages.
+This guide sets up the SDR Doppler radar on a new Windows 10/11 laptop: the Python version (drivers,
+packages) and the GNU Radio version (radioconda). It takes about 30 minutes and needs an internet
+connection once.
 
 ## What you need
 
@@ -60,10 +61,29 @@ Plug in the Nano. If the launcher shows `Arduino : not found`:
   it, then unplug and replug the Nano.
 - Some USB cables only charge. Try another cable.
 
-## Step 5: Run
+## Step 5: Install GNU Radio (radioconda)
 
-Double-click **`START_RADAR.bat`**. The radar starts by itself with speed limit 50 km/h. To change the
-limit, open `START_RADAR.bat` in Notepad and edit `set "LIMIT=50"` near the top.
+1. Download the Windows installer **`radioconda-<version>-Windows-x86_64.exe`** (about 630 MB) from
+   <https://github.com/radioconda/radioconda-installer/releases> (tested: 2025.03.14, GNU Radio 3.10.12).
+2. Run it. "Just Me" (installs to `C:\Users\<you>\radioconda`) or "All Users"
+   (`C:\ProgramData\radioconda`) both work. **Untick** "Add to PATH" and "Register as default Python",
+   so the Python version keeps using its own Python.
+3. The first run of `START_GNURADIO.bat` installs **pyserial** (for the Arduino display) automatically.
+
+radioconda contains GNU Radio, the PlutoSDR blocks (gr-iio, libiio 0.26) and its own Python, so nothing
+else is needed.
+
+## Step 6: Run
+
+**GNU Radio version (main demo):** double-click **`START_GNURADIO.bat`**. A window opens with the sliders
+(Frequency, Max speed, Speed limit, RX gain, TX attenuation), the live and held speed, the Doppler spectrum
+and the waterfall. Stand still for 3 s while it learns the background. Close the window to stop; the
+transmitter is muted automatically. To show the block diagram, double-click **`EDIT_GNURADIO.bat`**
+(GNU Radio Companion opens `gnuradio/doppler_radar.grc`; its Run button starts the radar too).
+
+**Python version (backup):** double-click **`START_RADAR.bat`**. It starts with speed limit 50 km/h. To
+change the limit, frequency or maximum speed, open `START_RADAR.bat` in Notepad and edit `LIMIT`,
+`FREQ_MHZ` and `MAX_SPEED` near the top.
 
 To test or for walking demos, double-click **`TOOLS.bat`**:
 
@@ -103,6 +123,8 @@ Pluto Rx -- extension cable (0.5-1 m) -- antenna, upright
 |---|---|
 | `Python is not installed` | Step 2. Tick "Add python.exe to PATH", then open the launcher again |
 | `ERROR: installing the Python packages failed` | Check the internet connection and run the launcher again |
+| GNU Radio window: `No Pluto device found` | Close other radar windows; the flowgraph uses `ip:192.168.2.1` (variable `pluto_uri`) |
+| Only strong targets detected, noisy spectrum | Tighten all SMA connectors by hand; keep the Pluto, cables and antennas off the laptop and away from fans |
 | `PlutoSDR : NOT FOUND` | Middle USB port, wait 30 s, close other radar windows, `TOOLS.bat` option 6 for drivers |
 | `Arduino : not found` | CH340 driver, other USB cable (Step 4) |
 | `Cannot open Arduino port` / `Access is denied` | Close the Arduino IDE and its Serial Monitor |

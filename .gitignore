@@ -221,3 +221,7 @@ __marimo__/
 
 # Radar pass log (created at runtime)
 speed_log.csv
+
+# GNU Radio: generated from doppler_radar.grc on every run
+SDR_Radar_Deploy/gnuradio/doppler_radar.py
+SDR_Radar_Deploy/gnuradio/doppler_radar_epy_block_*.py
