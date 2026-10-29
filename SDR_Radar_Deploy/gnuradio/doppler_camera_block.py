@@ -27,6 +27,9 @@ def _import_core():
     raise ImportError("doppler_core.py not found: keep the gnuradio folder inside SDR_Radar_Deploy")
 
 
+CLIP_LEVEL = 0.9    # leakage tone above 90 % of ADC full scale = receiver overload
+
+
 class blk(gr.sync_block):
     """Doppler Speed Camera: speed in km/h, last-speed hold, capture over the limit, log, Arduino"""
 
@@ -42,6 +45,7 @@ class blk(gr.sync_block):
         self.applied = None
         self.buf = np.zeros(0, np.complex64)
         self.kmh = self.snr = 0.0                       # latest frame, for the display
+        self.level = 0.0                                # TX->RX leakage level (1.0 = ADC full scale)
         self.arduino = None
 
     # --- GNU Radio start/stop --------------------------------------------------------------------
@@ -121,6 +125,7 @@ class blk(gr.sync_block):
             p_db, thr_db, noise_db, k, snr, confirmed = self.det(frame.astype(complex))
             kmh, proximity, ended = self.cam.update(self.det, p_db, k, snr, confirmed)
             self.kmh, self.snr = kmh, snr
+            self.level = float(np.abs(frame).mean())
             if self.arduino:
                 try:
                     self.arduino.write(self.cam.arduino_line(kmh, proximity, float(self.alarm_kmh)).encode())
@@ -130,13 +135,15 @@ class blk(gr.sync_block):
 
     # --- display (polled by Function Probe blocks) ---------------------------------------------------
     def live_text(self):
+        # receiver overload: more TX power or RX gain than the ADC can take
+        warn = "   !! CLIPPING: raise TX attenuation or lower RX gain" if self.level > CLIP_LEVEL else ""
         if self.det is None or not self.det.ready:
-            return "learning background ... stand still"
+            return "learning background ... stand still" + warn
         if self.kmh == 0:
-            return "no target"
+            return "no target" + warn
         way = "approaching" if self.kmh > 0 else "receding"
         flag = "   OVER LIMIT" if abs(self.kmh) > float(self.limit_kmh) else ""
-        return f"{abs(self.kmh):.1f} km/h {way}   (signal {self.snr:.0f} dB){flag}"
+        return f"{abs(self.kmh):.1f} km/h {way}   (signal {self.snr:.0f} dB){flag}{warn}"
 
     def held_text(self):
         cam = self.cam
