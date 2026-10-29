@@ -64,7 +64,8 @@ def peak_offset(p_db, k):
 class Detector:
     """Spectrum of the last 0.5 s, clutter map and peak detection; call once per FRAME samples."""
 
-    def __init__(self, max_doppler_hz=1000.0):
+    def __init__(self, max_doppler_hz=1000.0, detect_db=DETECT_DB):
+        self.detect_db = detect_db                       # min signal: higher = only strong (close) echoes
         self.window = np.hanning(NFFT)
         self.freqs = np.fft.fftshift(np.fft.fftfreq(NFFT, 1 / FS_DOPPLER))
         self.set_max_doppler(max_doppler_hz)
@@ -97,7 +98,7 @@ class Detector:
 
         # threshold per bin: above the noise floor AND above the learned background of that bin
         noise_db = np.median(p_db[band])
-        thr_db = np.maximum(noise_db + DETECT_DB,
+        thr_db = np.maximum(noise_db + self.detect_db,
                             self.clutter_db + CLUTTER_DB + CLUTTER_K * np.sqrt(self.clutter_var))
         excess = p_db - thr_db
         idx = np.flatnonzero(band)

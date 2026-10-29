@@ -15,6 +15,7 @@ Run:
   python 02_doppler_radar.py --max-kmh 10       # bench test (hand / walking)
   python 02_doppler_radar.py --freq-mhz 2450    # carrier frequency (antennas must suit it)
   python 02_doppler_radar.py --max-speed 400    # highest speed searched (up to ~740 km/h at 2.48 GHz)
+  python 02_doppler_radar.py --min-signal 15 --tx-gain -10   # long range (default is short range ~1-2 m)
   python 02_doppler_radar.py --port COM5        # also send speed to Arduino Nano
   python 02_doppler_radar.py --port auto        # find the Arduino's COM port automatically
   python 02_doppler_radar.py --no-sound         # display only
@@ -36,10 +37,11 @@ from doppler_core import (Detector, SpeedCamera, FS_DOPPLER, NFFT, FRAME, dopple
 # --- Radar settings ---
 PLUTO_URI   = "ip:192.168.2.1"
 FREQ_MHZ    = 2482        # carrier, top of the 2.4 GHz ISM band (upper edge of Wi-Fi channel 13)
-MAX_SPEED   = 220         # highest speed searched (km/h); --max-speed changes it
+MAX_SPEED   = 60          # highest speed searched (km/h); --max-speed changes it (up to ~740)
+MIN_SIGNAL  = 35          # dB above the noise floor a target needs; 35 = close targets only (~1-2 m)
 SAMPLE_RATE = 1_000_000   # Pluto sample rate
 TONE_HZ     = 100e3       # TX tone offset (keeps the signal away from RX DC offset)
-TX_GAIN_DB  = -10         # TX attenuation (0 = max power)
+TX_GAIN_DB  = -30         # TX attenuation (0 = max power); -30 = short range, -10 = long range
 TX_OFF_DB   = -89         # TX attenuation used on exit (mutes the LO leakage too)
 RX_GAIN_DB  = 30          # RX gain (0..70); lower it if "CLIPPING" appears
 DECIM_1, DECIM_2 = 25, 5  # 1 MS/s -> 40 kS/s -> 8 kS/s
@@ -141,7 +143,7 @@ def open_arduino(port):
 
 def run_radar(sdr, alarm, arduino, args):
     down = Downconverter()
-    det = Detector(kmh_to_doppler(args.max_speed, args.fc))
+    det = Detector(kmh_to_doppler(args.max_speed, args.fc), args.min_signal)
     cam = SpeedCamera(args.fc, args.limit, LOG_FILE)
     freqs = det.freqs
 
@@ -238,6 +240,8 @@ def main():
     ap.add_argument("--limit", type=float, help="speed limit: faster passes are captured (default: --max-kmh)")
     ap.add_argument("--freq-mhz", type=float, default=FREQ_MHZ, help="carrier frequency in MHz (325..3800)")
     ap.add_argument("--max-speed", type=float, default=MAX_SPEED, help="highest speed searched in km/h")
+    ap.add_argument("--min-signal", type=float, default=MIN_SIGNAL,
+                    help="min target signal in dB (higher = only closer targets; 15 = longest range)")
     ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
     ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
     ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")

@@ -38,7 +38,17 @@ Sliders in the window (they act immediately, no restart):
 | Frequency (MHz) | 2400-2483 | The 2.4 GHz antennas and the licence-free band limit it to this range. Changing it re-learns the background (~3 s) |
 | Max speed (km/h) | 10-740 | Highest speed searched. The limit is ~740 km/h at 2.48 GHz (3.4 kHz Doppler) |
 | Speed limit (km/h) | 5-300 | Passes faster than this are CAPTURED (logged, blinking on the LED) |
-| RX gain / TX attenuation | 0-70 dB / 0-89 dB | Lower RX gain if the spectrum looks clipped |
+| TX attenuation (dB) | 0-89 | Higher = less power = shorter range. Range changes by x1.8 per 10 dB |
+| Min signal (dB) | 10-50 | Signal a target needs above the noise. Higher = only closer targets (x0.56 range per +10 dB) |
+| RX gain (dB) | 0-70 | Keep as high as possible without `!! CLIPPING` in the LIVE SPEED line |
+
+**Default settings = short range (about 1-2 m) for indoor demos:** TX attenuation 30 dB, RX gain 30 dB,
+Min signal 35 dB, Max speed 60 km/h, Speed limit 10 km/h. A person is detected only within about 1-2 m
+(it depends on the size of the target); farther movement is ignored. Speed accuracy is the same at every
+range. To fine-tune: raise Min signal by 5 dB for a shorter range, lower it by 5 dB for a longer one.
+
+**Long range (cars, outdoors):** TX attenuation 10, Min signal 15, Max speed 220, Speed limit 50.
+Maximum power: TX attenuation 0 with RX gain 20 (RX gain 30 clips).
 
 The **Doppler Speed Camera** block (`gnuradio/doppler_camera_block.py`) uses `doppler_core.py`, the same
 detector as the Python version: clutter map, mirror test, sub-bin peak, pass tracking and capture. The two
@@ -49,8 +59,9 @@ versions therefore give identical speeds. The spectrum display is in Hz: km/h = 
 
 `START_RADAR.bat` checks Python, installs the Python packages, installs the Pluto drivers if libiio is
 missing, finds the Pluto and the Arduino's COM port, and starts the radar with speed limit **50 km/h**.
-To change the limit, frequency or maximum speed, edit `LIMIT`, `FREQ_MHZ` and `MAX_SPEED` near the top of
-`START_RADAR.bat` (use `LIMIT=10` for walking tests).
+The same short-range defaults apply. To change them, edit `LIMIT`, `MAXKMH`, `FREQ_MHZ`, `MAX_SPEED`,
+`TX_GAIN` and `MIN_SIGNAL` near the top of `START_RADAR.bat` (cars: `LIMIT=50`, `MAXKMH=60`,
+`MAX_SPEED=220`, `TX_GAIN=-10`, `MIN_SIGNAL=15`).
 
 **`TOOLS.bat`** opens a menu for tests and setup:
 
@@ -163,11 +174,12 @@ python 02_doppler_radar.py [--max-kmh 60] [--limit 50] [--freq-mhz 2482] [--max-
 | `--max-kmh` | Speed at which the alarm is loudest. Use 10 indoors, 60+ for cars |
 | `--limit` | Speed limit in km/h: faster passes are captured (default: same as `--max-kmh`) |
 | `--freq-mhz` | Carrier frequency, 325..3800 MHz (use 2400-2483 with the 2.4 GHz antennas) |
-| `--max-speed` | Highest speed searched in km/h (default 220, up to ~740 at 2482 MHz) |
+| `--max-speed` | Highest speed searched in km/h (default 60, up to ~740 at 2482 MHz) |
+| `--min-signal` | Min target signal in dB (default 35 = close targets only, 15 = longest range) |
 | `--port` | Arduino COM port, or `auto`; sends `S<kmh>,P<proximity>,V<volume>,L<last kmh>,F<captured>` lines at 115200 baud |
 | `--no-sound` | Turn off the laptop-speaker alarm |
 | `--rx-gain` | RX gain, 0..70 dB. Lower it if the screen shows `CLIPPING` |
-| `--tx-gain` | TX attenuation, 0 (max power) to -89 dB |
+| `--tx-gain` | TX attenuation, 0 (max power) to -89 dB (default -30 = short range; -10 for long range) |
 
 On exit (window closed, Ctrl+C, console closed or a startup error) the program destroys the TX buffer
 and sets TX attenuation to -89 dB, so the Pluto stops transmitting.

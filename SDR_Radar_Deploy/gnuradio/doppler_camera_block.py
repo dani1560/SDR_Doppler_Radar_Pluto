@@ -33,12 +33,13 @@ CLIP_LEVEL = 0.9    # leakage tone above 90 % of ADC full scale = receiver overl
 class blk(gr.sync_block):
     """Doppler Speed Camera: speed in km/h, last-speed hold, capture over the limit, log, Arduino"""
 
-    def __init__(self, freq_mhz=2482.0, max_kmh=220.0, limit_kmh=50.0, alarm_kmh=60.0, arduino_port="auto",
-                 pluto_uri="ip:192.168.2.1"):
+    def __init__(self, freq_mhz=2482.0, max_kmh=60.0, limit_kmh=10.0, alarm_kmh=10.0, arduino_port="auto",
+                 pluto_uri="ip:192.168.2.1", min_signal_db=15.0):
         gr.sync_block.__init__(self, name="Doppler Speed Camera", in_sig=[np.complex64], out_sig=None)
         # GRC updates these attributes when the sliders move; work() applies them
         self.freq_mhz, self.max_kmh, self.limit_kmh = freq_mhz, max_kmh, limit_kmh
         self.alarm_kmh, self.arduino_port, self.pluto_uri = alarm_kmh, arduino_port, pluto_uri
+        self.min_signal_db = min_signal_db
         self.dc, base = _import_core()
         self.log_file = os.path.join(base, "speed_log.csv")
         self.det = self.cam = None
@@ -96,24 +97,26 @@ class blk(gr.sync_block):
     # --- settings from the GUI sliders ------------------------------------------------------------
     def _apply_settings(self):
         fc = float(self.freq_mhz) * 1e6
-        settings = (fc, float(self.max_kmh), float(self.limit_kmh))
+        settings = (fc, float(self.max_kmh), float(self.limit_kmh), float(self.min_signal_db))
         if settings == self.applied:
             return
         dc = self.dc
         max_doppler = dc.kmh_to_doppler(min(float(self.max_kmh), dc.max_speed_kmh(fc)), fc)
         if self.det is None:
-            self.det = dc.Detector(max_doppler)
+            self.det = dc.Detector(max_doppler, float(self.min_signal_db))
             self.cam = dc.SpeedCamera(fc, float(self.limit_kmh), self.log_file)
         else:
             if self.applied[0] != fc:
                 self.det.reset()                        # new frequency: learn the background again
             self.det.set_max_doppler(max_doppler)
+            self.det.detect_db = float(self.min_signal_db)
             self.cam.fc, self.cam.limit = fc, float(self.limit_kmh)
         self.applied = settings
         print(f"Doppler camera: {fc / 1e6:g} MHz, speeds up to "
               f"{dc.doppler_to_kmh(self.det.max_doppler_hz, fc):.0f} km/h "
               f"(max possible {dc.max_speed_kmh(fc):.0f}), resolution "
-              f"{dc.doppler_to_kmh(dc.FS_DOPPLER / dc.NFFT, fc):.2f} km/h, limit {float(self.limit_kmh):g} km/h")
+              f"{dc.doppler_to_kmh(dc.FS_DOPPLER / dc.NFFT, fc):.2f} km/h, limit {float(self.limit_kmh):g} km/h, "
+              f"min signal {float(self.min_signal_db):g} dB")
 
     # --- processing --------------------------------------------------------------------------------
     def work(self, input_items, output_items):

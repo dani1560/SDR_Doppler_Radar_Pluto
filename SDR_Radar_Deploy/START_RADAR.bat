@@ -13,13 +13,17 @@ title SDR Doppler Radar
 rem --- Radar settings: change these if you like --------------------
 rem  LIMIT  = speed limit in km/h; faster passes are CAPTURED
 rem  MAXKMH = speed at which the alarm is loudest
-rem  For walking tests indoors use LIMIT=10 and MAXKMH=10.
+rem  For cars use LIMIT=50, MAXKMH=60, MAX_SPEED=220, TX_GAIN=-10, MIN_SIGNAL=15.
 rem  FREQ_MHZ  = carrier frequency (2400-2483 with the 2.4 GHz antennas)
 rem  MAX_SPEED = highest speed searched in km/h (up to ~740 at 2482 MHz)
-set "LIMIT=50"
-set "MAXKMH=60"
+rem  TX_GAIN    = TX attenuation in dB (-30 short range, -10 long range, 0 max power)
+rem  MIN_SIGNAL = min target signal in dB (35 = only close targets ~1-2 m, 15 = longest range)
+set "LIMIT=10"
+set "MAXKMH=10"
 set "FREQ_MHZ=2482"
-set "MAX_SPEED=220"
+set "MAX_SPEED=60"
+set "TX_GAIN=-30"
+set "MIN_SIGNAL=35"
 
 rem --- 1. Python --------------------------------------------------
 python --version >nul 2>&1
@@ -169,9 +173,9 @@ exit /b 0
 
 :run_radar
 if defined PORT (
-    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED% --port %PORT%
+    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED% --tx-gain %TX_GAIN% --min-signal %MIN_SIGNAL% --port %PORT%
 ) else (
-    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED%
+    python 02_doppler_radar.py --max-kmh %MAXKMH% --limit %LIMIT% --freq-mhz %FREQ_MHZ% --max-speed %MAX_SPEED% --tx-gain %TX_GAIN% --min-signal %MIN_SIGNAL%
 )
 exit /b 0
 
