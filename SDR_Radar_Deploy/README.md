@@ -140,11 +140,18 @@ TM1637:   CLK --> D2          (follow the labels on your module;
           5V  --> 5V
           GND --> GND
 
-Buzzer:   Nano D9 --[1k]--> NPN base           (buzzer must be on D9: Timer1 hardware PWM)
-          NPN emitter --> GND
-          NPN collector --> buzzer (-)  and diode anode
-          buzzer (+)    --> 5V          and diode cathode (stripe)
+Buzzer, choose one (D9 and D10 are fixed: Timer1 outputs; D10 is the inverse of D9):
+  A) piezo, loudest without parts:   buzzer between D9 and D10   (10 V swing)
+  B) simplest:                       buzzer between D9 and GND
+  C) magnetic buzzer / 9 V supply:   Nano D9 --[1k]--> NPN base (BC547 middle leg)
+                                     NPN emitter   --> GND
+                                     NPN collector --> buzzer (-)  and diode anode
+                                     buzzer (+)    --> 5 V or 9 V  and diode cathode (stripe)
+     With a piezo in C), put a 1 kOhm resistor across the buzzer. With 9 V, join the battery (-) to GND.
 ```
+
+The buzzer always plays at full volume (50 % square wave). Its pitch rises with speed (1.8-3.6 kHz,
+where a passive buzzer is loudest) and it beeps faster for a closer target.
 
 NPN pins, flat face toward you, legs down: **2N2222 = E B C**, **BC547 = C B E** (reversed).
 
