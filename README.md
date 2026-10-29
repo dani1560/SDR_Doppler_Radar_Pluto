@@ -32,9 +32,9 @@ detector (`doppler_core.py`).
 | Parameter | Value |
 |---|---|
 | Carrier | 2.482 GHz default, adjustable 2400-2483 MHz (2.4 GHz ISM band) |
-| FFT | 4096 points over 0.5 s, 1.95 Hz bins, 0.1 km/h readout (peak interpolation) |
+| FFT | 2048 points over 0.26 s, 3.9 Hz bins, 0.1 km/h readout (peak interpolation) |
 | Speed range | about 3.3 km/h to the max-speed setting (default 220, up to ~740 km/h), approaching and receding |
-| Update rate | 64 ms |
+| Update rate | 64 ms; held speed on the LED about 0.75 s after the target leaves |
 
 ## Quick start
 

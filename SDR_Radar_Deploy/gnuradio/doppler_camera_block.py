@@ -33,7 +33,7 @@ CLIP_LEVEL = 0.9    # leakage tone above 90 % of ADC full scale = receiver overl
 class blk(gr.sync_block):
     """Doppler Speed Camera: speed in km/h, last-speed hold, capture over the limit, log, Arduino"""
 
-    def __init__(self, freq_mhz=2482.0, max_kmh=60.0, limit_kmh=10.0, alarm_kmh=10.0, arduino_port="auto",
+    def __init__(self, freq_mhz=2482.0, max_kmh=50.0, limit_kmh=10.0, alarm_kmh=10.0, arduino_port="auto",
                  pluto_uri="ip:192.168.2.1", min_signal_db=15.0):
         gr.sync_block.__init__(self, name="Doppler Speed Camera", in_sig=[np.complex64], out_sig=None)
         # GRC updates these attributes when the sliders move; work() applies them

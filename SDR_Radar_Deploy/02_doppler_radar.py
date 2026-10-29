@@ -37,7 +37,7 @@ from doppler_core import (Detector, SpeedCamera, FS_DOPPLER, NFFT, FRAME, dopple
 # --- Radar settings ---
 PLUTO_URI   = "ip:192.168.2.1"
 FREQ_MHZ    = 2482        # carrier, top of the 2.4 GHz ISM band (upper edge of Wi-Fi channel 13)
-MAX_SPEED   = 60          # highest speed searched (km/h); --max-speed changes it (up to ~740)
+MAX_SPEED   = 50          # highest speed searched (km/h); --max-speed changes it (up to ~740)
 MIN_SIGNAL  = 20          # dB above the noise floor a target needs (measured: still room max 19 dB, walking 24-47 dB)
 SAMPLE_RATE = 1_000_000   # Pluto sample rate
 TONE_HZ     = 100e3       # TX tone offset (keeps the signal away from RX DC offset)

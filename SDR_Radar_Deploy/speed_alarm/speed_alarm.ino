@@ -17,7 +17,8 @@
       the colon is used as the decimal point, "45:3"
     - live speed while a target is passing
     - holds the LAST measured speed (peak of the pass) after it has passed
-    - blinks the held speed if that pass was over the speed limit (captured)
+    - every new captured speed blinks for 5 s, then stays steady
+    - keeps blinking if that pass was over the speed limit
     - "----" until the first pass
     Start-up test lights all segments, colon and dots: "88:88" means a colon module.
 
@@ -43,6 +44,7 @@ const uint8_t DISP_CLK = 2;
 const uint8_t DISP_DIO = 3;
 const uint8_t LED_PIN = LED_BUILTIN;   // on-board LED blinks with the beeps
 const unsigned long TIMEOUT_MS = 500;
+const unsigned long NEW_PASS_BLINK_MS = 5000;   // a new captured speed blinks this long
 const bool HAS_DOTS = false;           // true for modules with decimal points, false for colon-only modules
 const bool COLON_AS_POINT = false;     // colon-only modules: true = "45:3", false = whole km/h "  45"
 const uint8_t DOT_000_0 = 0b00100000;  // decimal point after the 3rd digit
@@ -55,6 +57,8 @@ const uint8_t DASHES[] = {SEG_G, SEG_G, SEG_G, SEG_G};
 float speedKmh = 0;
 float lastKmh = -1;     // -1 = no pass yet
 bool overLimit = false; // last pass was over the speed limit
+float heldKmh = -1;     // last speed already noticed, to detect a new pass
+unsigned long blinkUntilMs = 0;
 int proximity = 0;      // 0..100
 int volume = 0;         // 0..100
 
@@ -150,9 +154,16 @@ void loop() {
 
   bool active = volume > 0 && proximity > 0 && millis() - lastMsgMs < TIMEOUT_MS;
 
-  // Display: live speed during a pass, otherwise hold the last speed (blinking if it was over the limit)
+  // A new captured speed arrived: blink it for NEW_PASS_BLINK_MS
+  if (lastKmh != heldKmh) {
+    heldKmh = lastKmh;
+    if (lastKmh >= 0) blinkUntilMs = millis() + NEW_PASS_BLINK_MS;
+  }
+  bool blinking = lastKmh >= 0 && (overLimit || millis() < blinkUntilMs);
+
+  // Display: live speed during a pass, otherwise hold the last speed (blinking when new or over the limit)
   if (active) showTenths(toTenths(speedKmh));
-  else if (overLimit && lastKmh >= 0 && (millis() / 300) % 2) showTenths(BLANK);
+  else if (blinking && (millis() / 250) % 2) showTenths(BLANK);
   else showTenths(toTenths(lastKmh));
 
   if (!active) {

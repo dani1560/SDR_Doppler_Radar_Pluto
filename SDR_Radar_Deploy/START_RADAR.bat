@@ -21,7 +21,7 @@ rem  MIN_SIGNAL = min target signal in dB (20 default; higher = only closer targ
 set "LIMIT=10"
 set "MAXKMH=10"
 set "FREQ_MHZ=2482"
-set "MAX_SPEED=60"
+set "MAX_SPEED=50"
 set "TX_GAIN=-30"
 set "MIN_SIGNAL=20"
 

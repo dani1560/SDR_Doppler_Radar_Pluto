@@ -43,7 +43,7 @@ Sliders in the window (they act immediately, no restart):
 | RX gain (dB) | 0-70 | Keep as high as possible without `!! CLIPPING` in the LIVE SPEED line |
 
 **Default settings = short range for indoor demos:** TX attenuation 30 dB, RX gain 30 dB, Min signal 20 dB,
-Max speed 60 km/h, Speed limit 10 km/h. Measured in a room: with nobody moving the strongest signal was
+Max speed 50 km/h, Speed limit 10 km/h. Measured in a room: with nobody moving the strongest signal was
 19 dB (no false detections); a walking person gave 24-47 dB (median 33 dB) and was detected in every
 5-second window of movement. To fine-tune: raise Min signal by 5 dB for a shorter range (closer targets
 only), lower it to 15 for a longer range. Speed accuracy is the same at every setting.
@@ -147,8 +147,9 @@ Buzzer:   Nano D9 --[1k]--> NPN base           (buzzer must be on D9: Timer1 har
 
 NPN pins, flat face toward you, legs down: **2N2222 = E B C**, **BC547 = C B E** (reversed).
 
-The display shows the live speed during a pass, then holds the pass's peak speed; it
-blinks if that pass was captured (over the limit). `----` means no pass yet.
+The display shows the live speed during a pass, then holds the pass's peak speed. Every new captured
+speed blinks for 5 s and then stays steady; a pass over the speed limit keeps blinking. After a restart
+the display shows the last pass from `speed_log.csv`. `----` means no pass yet.
 This 0.56" TM1637 module has only a colon and no decimal points, so it shows **whole km/h** (`  45`);
 the screen and `speed_log.csv` keep one decimal. For a decimal point on the LED, use a TM1637 module
 **with decimal points** (same wiring) and set `HAS_DOTS = true` in `speed_alarm.ino` (shows `45.3`).
@@ -175,7 +176,7 @@ python 02_doppler_radar.py [--max-kmh 60] [--limit 50] [--freq-mhz 2482] [--max-
 | `--max-kmh` | Speed at which the alarm is loudest. Use 10 indoors, 60+ for cars |
 | `--limit` | Speed limit in km/h: faster passes are captured (default: same as `--max-kmh`) |
 | `--freq-mhz` | Carrier frequency, 325..3800 MHz (use 2400-2483 with the 2.4 GHz antennas) |
-| `--max-speed` | Highest speed searched in km/h (default 60, up to ~740 at 2482 MHz) |
+| `--max-speed` | Highest speed searched in km/h (default 50, up to ~740 at 2482 MHz) |
 | `--min-signal` | Min target signal in dB (default 35 = close targets only, 15 = longest range) |
 | `--port` | Arduino COM port, or `auto`; sends `S<kmh>,P<proximity>,V<volume>,L<last kmh>,F<captured>` lines at 115200 baud |
 | `--no-sound` | Turn off the laptop-speaker alarm |
@@ -208,7 +209,8 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 | Carrier | 2.482 GHz (top of the 2.4 GHz ISM band) |
 | Waveform | CW tone at +100 kHz offset |
 | Sample rate | 1 MS/s, decimated to 8 kS/s |
-| FFT | 4096 points (0.5 s), ~1.95 Hz bins (0.42 km/h); parabolic peak interpolation gives 0.1 km/h readout |
+| FFT | 2048 points (0.26 s), 3.9 Hz bins (0.85 km/h); parabolic peak interpolation gives a 0.1 km/h readout (measured error below 0.05 km/h) |
+| Response | Live speed about 0.15 s after movement starts; held (last) speed about 0.75 s after the target leaves |
 | Speed range | about 3.3 km/h up to the max-speed setting (default 220, up to ~740 km/h at 2482 MHz), approaching and receding |
 | Frequency | adjustable; 2400-2483 MHz with the 2.4 GHz antennas (Pluto range 325-3800 MHz) |
 | Clutter rejection | Mirror-peak test (fans) plus 2-frame confirmation |

@@ -13,7 +13,7 @@ import numpy as np
 C = 3e8
 FS_DOPPLER = 8000         # Doppler sample rate (Hz)
 FRAME = 512               # samples per frame = 64 ms
-NFFT = 4096               # 0.5 s window -> 1.95 Hz bins
+NFFT = 2048               # 0.256 s window -> 3.9 Hz bins (0.85 km/h); short window = fast response
 
 # --- Detection settings ---
 MIN_DOPPLER_HZ = 15       # ignore |fd| below this (TX leakage; 3.3 km/h at 2.482 GHz)
@@ -35,7 +35,7 @@ FREEZE_DB      = 3        # bins this far above their threshold are not learned 
 CANDIDATES     = 5        # peaks checked per frame (people, limbs, vehicles can be in view together)
 
 # --- Last-speed hold ---
-PASS_END_FRAMES = 16      # ~1 s without target ends a pass
+PASS_END_FRAMES = 6       # ~0.4 s without target ends a pass (fast LED update)
 PASS_MIN_FRAMES = 3       # a pass needs this many detections to count
 LOG_HEADER = "date,time,speed_kmh,direction,limit_kmh,captured"
 
