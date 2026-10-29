@@ -6,8 +6,8 @@
   e.g. "S45.2,P70,V75,L38.0,F0"
 
   Buzzer behaviour:
-    - volume (PWM duty cycle)  follows speed     -> faster target = louder
-    - pitch                    follows speed     -> faster target = higher tone
+    - volume (PWM duty cycle)  follows speed     -> always loud, faster target = louder
+    - pitch (1.8-3.6 kHz)      follows speed     -> faster target = higher tone
     - beep rate (1..10 /s)     follows proximity -> closer target = faster beeps
     - silent when no target, or when no data arrives for 0.5 s
 
@@ -70,7 +70,7 @@ int shown = -3;         // value currently on the display (avoids redundant writ
 // Timer1 fast PWM on D9: frequency = pitch, duty cycle = loudness
 void buzzerOn(float pitchHz, int vol) {
   uint16_t top = (uint16_t)(2000000.0 / pitchHz) - 1;   // 16 MHz / prescaler 8
-  float duty = 0.02 + 0.48 * vol / 100.0;               // 2 % (quiet) .. 50 % (loudest)
+  float duty = 0.30 + 0.20 * vol / 100.0;               // 30 % .. 50 %: always loud, loudest when fast
   ICR1 = top;
   OCR1A = (uint16_t)(top * duty);
   if (TCNT1 > top) TCNT1 = 0;                           // pitch dropped mid-cycle: avoid counting to 65535
@@ -143,7 +143,7 @@ void setup() {
 
   display.setBrightness(7);       // 0..7
   display.showNumberDecEx(8888, 0b11100000);  // display test: "8.8.8.8." (or "88:88" on colon modules)
-  buzzerOn(1000, 60);             // start-up chirp: buzzer wired correctly
+  buzzerOn(2700, 100);            // start-up chirp: buzzer wired correctly
   delay(1000);
   buzzerOff();
   showTenths(-1);
@@ -177,7 +177,7 @@ void loop() {
   bool beepOn = (millis() % period) < period / 2;      // 50 % on / off
 
   if (beepOn) {
-    float pitch = 600.0 + 6.0 * volume;                 // 600 Hz .. 1200 Hz
+    float pitch = 1800.0 + 18.0 * volume;               // 1800 .. 3600 Hz, where a passive buzzer is loudest
     buzzerOn(pitch, volume);
     digitalWrite(LED_PIN, HIGH);
   } else {
