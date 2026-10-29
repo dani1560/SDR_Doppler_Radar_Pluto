@@ -135,6 +135,8 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 
 | Symptom | Fix |
 |---|---|
+| `DATA LOST: computer too slow` | Plug in the charger (on battery Windows slows the CPU) and close other programs |
+| Wrong or jumping speeds with several people in view | The radar reports the strongest echo; test with one moving person or vehicle at a time |
 | `CLIPPING` on screen | Lower `--rx-gain` (e.g. 20), or separate the TX and RX antennas |
 | False targets with no one moving | Turn off ceiling fans; point the antennas away from moving objects |
 | Noisy spectrum | Wi-Fi interference. 2.482 GHz sits at the upper edge of Wi-Fi channel 13; change `CENTER_FREQ` if needed |
@@ -154,4 +156,5 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 | FFT | 4096 points (0.5 s), ~1.95 Hz bins (0.42 km/h); parabolic peak interpolation gives 0.1 km/h readout |
 | Speed range | about 3.3 to 218 km/h, approaching and receding |
 | Clutter rejection | Mirror-peak test (fans) plus 2-frame confirmation |
-| Update rate | 64 ms per frame (measured: the loop keeps up with the Pluto, no dropped samples) |
+| Update rate | 64 ms per frame processed; window redrawn every 0.25 s so the loop keeps up on battery |
+| Clutter map | Learns the background (Pluto spurs, static clutter) for ~2.5 s at start-up; screen shows `learning background` |

@@ -42,6 +42,9 @@ RX_GAIN_DB  = 30          # RX gain (0..70); lower it if "CLIPPING" appears
 DECIM_1, DECIM_2 = 25, 5  # 1 MS/s -> 40 kS/s -> 8 kS/s
 FS_DOPPLER  = SAMPLE_RATE / (DECIM_1 * DECIM_2)
 RX_BLOCK    = DECIM_1 * DECIM_2 * 512   # 64000 samples = 64 ms per read
+BLOCK_S     = RX_BLOCK / SAMPLE_RATE
+DRAW_S      = 0.25        # redraw the window every 0.25 s; every 64 ms block is still processed
+LAG_BLOCKS  = 6           # more blocks behind real time than this = the Pluto dropped data
 NFFT        = 4096        # 0.5 s window -> ~2 Hz bins -> ~0.12 m/s resolution
 
 # --- Detection settings ---
@@ -51,6 +54,17 @@ DETECT_DB      = 15       # peak must be this far above the noise floor
 STRONG_DB      = 40       # SNR treated as "very close" (proximity 100 %)
 MIRROR_DB      = 6        # peak must beat its mirror (-fd) by this much; rejects fans / vibration
 CONFIRM_FRAMES = 2        # consecutive detections needed before reporting a target
+# Clutter map: the Pluto has spurs at multiples of ~9.8 Hz that fluctuate up to ~24 dB above the noise
+# floor. When no target is present, the map learns the mean and spread (dB) of every bin; a peak must
+# beat mean + CLUTTER_DB + CLUTTER_K * spread of its own bin. Quiet bins keep the DETECT_DB threshold,
+# spur bins get a higher one (~31 dB). Moving targets change bin, spurs never do.
+CLUTTER_FRAMES = 60       # ~4 s averaging time of the clutter map
+CLUTTER_DB     = 3        # margin above the learned mean of the bin
+CLUTTER_K      = 2        # ... plus this many standard deviations of the bin
+CLUTTER_RISE_DB = 3       # max rise per update: a short burst (antenna bumped) cannot blind the radar
+LEARN_FRAMES   = 30       # ~2 s of learning after the 0.5 s window has filled, before detecting
+FREEZE_DB      = 3        # bins this far above their threshold are not learned into the map
+CANDIDATES     = 5        # peaks checked per frame (people, limbs, vehicles can be in view together)
 
 # --- Last-speed hold ---
 PASS_END_FRAMES = 16      # ~1 s without target ends a pass
@@ -182,14 +196,71 @@ def log_pass(kmh, limit):
     return f"{now:%H:%M:%S}", captured
 
 
+class Detector:
+    """Spectrum of the last 0.5 s, clutter map and peak detection; call once per decimated block."""
+
+    def __init__(self):
+        self.history = np.zeros(NFFT, complex)
+        self.window = np.hanning(NFFT)
+        self.freqs = np.fft.fftshift(np.fft.fftfreq(NFFT, 1 / FS_DOPPLER))
+        self.band = (np.abs(self.freqs) >= MIN_DOPPLER_HZ) & (np.abs(self.freqs) <= MAX_DOPPLER_HZ)
+        self.frame = self.learned = self.hits = 0
+        self.clutter_db = np.full(NFFT, -300.0)          # clutter map: mean (dB) of every bin
+        self.clutter_var = np.zeros(NFFT)                # ... and its variance (dB^2)
+
+    @property
+    def ready(self):
+        return self.learned >= LEARN_FRAMES
+
+    def __call__(self, y):
+        """Add one block; return (p_db, thr_db, noise_db, k, snr, confirmed)."""
+        self.history = np.concatenate([self.history[len(y):], y])
+        x = self.history - self.history.mean()          # remove TX leakage (DC)
+        spec = np.fft.fftshift(np.fft.fft(x * self.window)) / NFFT
+        p_db = 10 * np.log10(np.abs(spec) ** 2 + 1e-30)
+        self.frame += 1
+        band = self.band
+
+        # threshold per bin: above the noise floor AND above the learned background of that bin
+        noise_db = np.median(p_db[band])
+        thr_db = np.maximum(noise_db + DETECT_DB,
+                            self.clutter_db + CLUTTER_DB + CLUTTER_K * np.sqrt(self.clutter_var))
+        excess = p_db - thr_db
+        idx = np.flatnonzero(band)
+        k = idx[np.argmax(excess[idx])]                  # strongest peak relative to its threshold
+        hit = False
+        if self.ready:
+            # several people / limbs can be in view: take the strongest candidate that passes the mirror test
+            for c in idx[np.argsort(excess[idx])[::-1][:CANDIDATES]]:
+                if excess[c] < 0:
+                    break
+                km = NFFT - c                           # bin of the mirror frequency -fd
+                if p_db[c] - p_db[max(km - 2, 0):km + 3].max() >= MIRROR_DB:   # +-2 bins tolerance
+                    k, hit = c, True
+                    break
+        snr = p_db[k] - noise_db
+        self.hits = self.hits + 1 if hit else 0
+
+        if self.frame > NFFT // len(y):                 # window full: update the clutter map
+            self.learned += 1
+            if self.learned == 1:
+                self.clutter_db, self.clutter_var = p_db.copy(), np.full(NFFT, 25.0)   # 5 dB spread
+            else:
+                # freeze bins (and +-2 neighbours) holding a strong echo, so targets are never learned
+                strong = np.convolve(excess > FREEZE_DB, np.ones(5), "same") > 0 if self.ready else \
+                    np.zeros(NFFT, bool)
+                a = np.where(strong, 0.0, max(1 / CLUTTER_FRAMES, 1 / self.learned))
+                dev = p_db - self.clutter_db
+                self.clutter_db += a * np.minimum(dev, CLUTTER_RISE_DB)            # slow rise, fast fall
+                self.clutter_var += a * (np.clip(dev, -30, 10) ** 2 - self.clutter_var)
+        return p_db, thr_db, noise_db, k, snr, self.hits >= CONFIRM_FRAMES
+
+
 def run_radar(sdr, alarm, arduino, args):
     down = Downconverter()
-    history = np.zeros(NFFT, complex)
-    window = np.hanning(NFFT)
-    freqs = np.fft.fftshift(np.fft.fftfreq(NFFT, 1 / FS_DOPPLER))
-    band = (np.abs(freqs) >= MIN_DOPPLER_HZ) & (np.abs(freqs) <= MAX_DOPPLER_HZ)
+    det = Detector()
+    freqs = det.freqs
     recent = []
-    hits = 0
     pass_peak, pass_frames, lost_frames = 0.0, 0, 0     # current pass
     last_kmh, last_captured = None, False                # last completed pass
     n_captured, top_kmh = 0, 0.0                         # this session
@@ -228,27 +299,28 @@ def run_radar(sdr, alarm, arduino, args):
                            + f"limit {args.limit:g} km/h   captured {n_captured}   top {top_kmh:.1f} km/h")
         stats_txt.set_color("red" if last_captured else "dimgray")
 
+    plt.pause(0.001)                                     # open the window now: the first draw is slow
+    next_draw, lost_until = 0.0, 0.0
+    t_ref, blocks = None, 0                              # to detect blocks the Pluto had to drop
     try:
         while plt.fignum_exists(fig.number):
             raw = sdr.rx()
+            now = time.perf_counter()
+            if t_ref is None:
+                t_ref = now
+            blocks += 1
+            # each block is 64 ms of signal: if fewer blocks arrive than time has passed, data was lost
+            behind = (now - t_ref) / BLOCK_S - blocks
+            if behind > LAG_BLOCKS:
+                print(f"WARNING: computer too slow, about {behind:.0f} blocks of radar data lost "
+                      f"(plug in the charger / close other programs)")
+                lost_until, t_ref, blocks = now + 3.0, now, 0
             clipping = np.max(np.abs(raw)) > 0.9 * 2**11
             y = down(raw / 2**11)
-            history = np.concatenate([history[len(y):], y])
+            p_db, thr_db, noise_db, k, snr, confirmed = det(y)
+            ready = det.ready
 
-            x = history - history.mean()                # remove TX leakage (DC)
-            spec = np.fft.fftshift(np.fft.fft(x * window)) / NFFT
-            p_db = 20 * np.log10(np.abs(spec) + 1e-15)
-
-            noise_db = np.median(p_db[band])
-            k = np.flatnonzero(band)[np.argmax(p_db[band])]
-            snr = p_db[k] - noise_db
-            km = NFFT - k                                   # bin of the mirror frequency -fd
-            mirror_db = p_db[max(km - 2, 0):km + 3].max()   # +-2 bins tolerance
-
-            hit = snr >= DETECT_DB and p_db[k] - mirror_db >= MIRROR_DB
-            hits = hits + 1 if hit else 0
-
-            if hits >= CONFIRM_FRAMES:
+            if confirmed:
                 fd = freqs[k] + peak_offset(p_db, k) * FS_DOPPLER / NFFT   # sub-bin precision
                 recent = (recent + [doppler_to_kmh(fd)])[-3:]
                 kmh = float(np.median(recent))
@@ -260,9 +332,12 @@ def run_radar(sdr, alarm, arduino, args):
             else:
                 recent = []
                 kmh, proximity = 0.0, 0.0
-                msg, color = "  ---  no target  ---", "gray"
+                msg = "  ---  no target  ---" if ready else "  learning background ...  "
+                color = "gray"
             if clipping:
                 msg += "\nCLIPPING: lower --rx-gain"
+            if now < lost_until:
+                msg += "\nDATA LOST: computer too slow (charger?)"
 
             # Track each pass; when it ends, its peak speed becomes the "last speed"
             if proximity > 0:
@@ -285,11 +360,14 @@ def run_radar(sdr, alarm, arduino, args):
                 arduino.write(f"S{abs(kmh):.1f},P{proximity:.0f},V{volume:.0f},L{last:.1f},"
                               f"F{int(last_captured)}\n".encode())
 
-            line.set_ydata(p_db[show])
-            thr_line.set_ydata(np.full(show.sum(), noise_db + DETECT_DB))
-            speed_txt.set_text(msg)
-            speed_txt.set_color(color)
-            plt.pause(0.001)
+            # Redraw only a few times per second: drawing is slow, but every block must be processed
+            if now >= next_draw:
+                line.set_ydata(p_db[show])
+                thr_line.set_ydata(thr_db[show])
+                speed_txt.set_text(msg)
+                speed_txt.set_color(color)
+                plt.pause(0.001)
+                next_draw = time.perf_counter() + DRAW_S
     finally:
         if pass_frames >= PASS_MIN_FRAMES:              # pass still in progress when stopped
             end_pass(pass_peak)
