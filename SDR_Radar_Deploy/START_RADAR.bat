@@ -17,13 +17,13 @@ rem  For cars use LIMIT=50, MAXKMH=60, MAX_SPEED=220, TX_GAIN=-10, MIN_SIGNAL=15
 rem  FREQ_MHZ  = carrier frequency (2400-2483 with the 2.4 GHz antennas)
 rem  MAX_SPEED = highest speed searched in km/h (up to ~740 at 2482 MHz)
 rem  TX_GAIN    = TX attenuation in dB (-30 short range, -10 long range, 0 max power)
-rem  MIN_SIGNAL = min target signal in dB (35 = only close targets ~1-2 m, 15 = longest range)
+rem  MIN_SIGNAL = min target signal in dB (20 default; higher = only closer targets, 15 = longest range)
 set "LIMIT=10"
 set "MAXKMH=10"
 set "FREQ_MHZ=2482"
 set "MAX_SPEED=60"
 set "TX_GAIN=-30"
-set "MIN_SIGNAL=35"
+set "MIN_SIGNAL=20"
 
 rem --- 1. Python --------------------------------------------------
 python --version >nul 2>&1

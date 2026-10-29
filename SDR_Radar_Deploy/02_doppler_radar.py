@@ -38,7 +38,7 @@ from doppler_core import (Detector, SpeedCamera, FS_DOPPLER, NFFT, FRAME, dopple
 PLUTO_URI   = "ip:192.168.2.1"
 FREQ_MHZ    = 2482        # carrier, top of the 2.4 GHz ISM band (upper edge of Wi-Fi channel 13)
 MAX_SPEED   = 60          # highest speed searched (km/h); --max-speed changes it (up to ~740)
-MIN_SIGNAL  = 35          # dB above the noise floor a target needs; 35 = close targets only (~1-2 m)
+MIN_SIGNAL  = 20          # dB above the noise floor a target needs (measured: still room max 19 dB, walking 24-47 dB)
 SAMPLE_RATE = 1_000_000   # Pluto sample rate
 TONE_HZ     = 100e3       # TX tone offset (keeps the signal away from RX DC offset)
 TX_GAIN_DB  = -30         # TX attenuation (0 = max power); -30 = short range, -10 = long range
@@ -241,7 +241,7 @@ def main():
     ap.add_argument("--freq-mhz", type=float, default=FREQ_MHZ, help="carrier frequency in MHz (325..3800)")
     ap.add_argument("--max-speed", type=float, default=MAX_SPEED, help="highest speed searched in km/h")
     ap.add_argument("--min-signal", type=float, default=MIN_SIGNAL,
-                    help="min target signal in dB (higher = only closer targets; 15 = longest range)")
+                    help="min target signal in dB (higher = only closer targets; 15 = longest range, default 20)")
     ap.add_argument("--no-sound", action="store_true", help="disable laptop-speaker alarm")
     ap.add_argument("--tx-gain", type=float, default=TX_GAIN_DB, help="TX attenuation in dB (0 = max, -89 = min)")
     ap.add_argument("--rx-gain", type=float, default=RX_GAIN_DB, help="RX gain in dB (0..70)")

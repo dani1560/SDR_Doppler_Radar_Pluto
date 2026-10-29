@@ -234,7 +234,7 @@ blocks:
   parameters:
     comment: ''
     label: 'Min signal (dB): higher = only close targets'
-    value: '35'
+    value: '20'
     start: '10'
     stop: '50'
     step: '1'

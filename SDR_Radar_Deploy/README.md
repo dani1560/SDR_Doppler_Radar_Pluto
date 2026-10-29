@@ -42,10 +42,11 @@ Sliders in the window (they act immediately, no restart):
 | Min signal (dB) | 10-50 | Signal a target needs above the noise. Higher = only closer targets (x0.56 range per +10 dB) |
 | RX gain (dB) | 0-70 | Keep as high as possible without `!! CLIPPING` in the LIVE SPEED line |
 
-**Default settings = short range (about 1-2 m) for indoor demos:** TX attenuation 30 dB, RX gain 30 dB,
-Min signal 35 dB, Max speed 60 km/h, Speed limit 10 km/h. A person is detected only within about 1-2 m
-(it depends on the size of the target); farther movement is ignored. Speed accuracy is the same at every
-range. To fine-tune: raise Min signal by 5 dB for a shorter range, lower it by 5 dB for a longer one.
+**Default settings = short range for indoor demos:** TX attenuation 30 dB, RX gain 30 dB, Min signal 20 dB,
+Max speed 60 km/h, Speed limit 10 km/h. Measured in a room: with nobody moving the strongest signal was
+19 dB (no false detections); a walking person gave 24-47 dB (median 33 dB) and was detected in every
+5-second window of movement. To fine-tune: raise Min signal by 5 dB for a shorter range (closer targets
+only), lower it to 15 for a longer range. Speed accuracy is the same at every setting.
 
 **Long range (cars, outdoors):** TX attenuation 10, Min signal 15, Max speed 220, Speed limit 50.
 Maximum power: TX attenuation 0 with RX gain 20 (RX gain 30 clips).
