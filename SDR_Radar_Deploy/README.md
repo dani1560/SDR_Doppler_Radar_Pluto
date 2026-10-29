@@ -42,8 +42,9 @@ Sliders in the window (they act immediately, no restart):
 | Min signal (dB) | 10-50 | Signal a target needs above the noise. Higher = only closer targets (x0.56 range per +10 dB) |
 | RX gain (dB) | 0-70 | Keep as high as possible without `!! CLIPPING` in the LIVE SPEED line |
 
-**Default settings = short range for indoor demos:** TX attenuation 30 dB, RX gain 30 dB, Min signal 20 dB,
-Max speed 50 km/h, Speed limit 10 km/h. Measured in a room: with nobody moving the strongest signal was
+**Default settings (toy car / indoor):** TX attenuation 20 dB, RX gain 30 dB, Min signal 15 dB,
+Max speed 50 km/h, Speed limit 10 km/h. With these, a 90 s room test gave no false detections and caught a
+toy car driven straight at the antennas (3-17 km/h, signal up to 47 dB). Earlier measurement (TX attenuation 30): with nobody moving the strongest signal was
 19 dB (no false detections); a walking person gave 24-47 dB (median 33 dB) and was detected in every
 5-second window of movement. To fine-tune: raise Min signal by 5 dB for a shorter range (closer targets
 only), lower it to 15 for a longer range. Speed accuracy is the same at every setting.

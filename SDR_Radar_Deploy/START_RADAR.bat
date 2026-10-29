@@ -22,8 +22,8 @@ set "LIMIT=10"
 set "MAXKMH=10"
 set "FREQ_MHZ=2482"
 set "MAX_SPEED=50"
-set "TX_GAIN=-30"
-set "MIN_SIGNAL=20"
+set "TX_GAIN=-20"
+set "MIN_SIGNAL=15"
 
 rem --- 1. Python --------------------------------------------------
 python --version >nul 2>&1

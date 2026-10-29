@@ -209,7 +209,7 @@ blocks:
   parameters:
     comment: ''
     label: 'TX attenuation (dB): higher = shorter range'
-    value: '30'
+    value: '20'
     start: '0'
     stop: '89'
     step: '1'
@@ -234,7 +234,7 @@ blocks:
   parameters:
     comment: ''
     label: 'Min signal (dB): higher = only close targets'
-    value: '20'
+    value: '15'
     start: '10'
     stop: '50'
     step: '1'
