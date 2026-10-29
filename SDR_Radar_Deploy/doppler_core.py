@@ -164,6 +164,18 @@ class SpeedCamera:
         self.last_kmh, self.last_time, self.last_captured = None, "", False   # last completed pass
         self.n_captured, self.top_kmh = 0, 0.0                            # this session
         prepare_log(log_file)
+        self._load_last_pass()
+
+    def _load_last_pass(self):
+        """Show the last logged pass at start-up: the Arduino resets when the port opens and forgets it."""
+        try:
+            rows = [l.split(",") for l in Path(self.log_file).read_text().splitlines()[1:] if l.strip()]
+            date, t, kmh, direction, *rest = rows[-1]
+            self.last_kmh = float(kmh) * (1 if direction == "approaching" else -1)
+            self.last_time = t
+            self.last_captured = bool(rest) and rest[-1] == "yes"
+        except (OSError, IndexError, ValueError):
+            pass                                        # no pass logged yet: display shows ----
 
     def update(self, det, p_db, k, snr, confirmed):
         """Return (kmh, proximity, pass_ended). kmh is signed (+ approaching), 0 without target."""
