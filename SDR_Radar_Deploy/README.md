@@ -1,8 +1,8 @@
 # SDR Doppler Radar with Speed Alarm
 
 CW Doppler radar on an ADALM-PLUTO SDR at 2.482 GHz, built in **GNU Radio** (main version) with a
-Python version as backup. Measures target speed in km/h and sounds an alarm: louder and higher-pitched
-for faster targets, faster beeps for closer (stronger) echoes. Frequency and maximum speed are adjustable.
+Python version as backup. Measures target speed in km/h and sounds a buzzer alarm: faster beeps for closer
+(stronger) echoes, slightly higher pitch for faster targets. Frequency and maximum speed are adjustable.
 
 It works like a street speed camera: each pass's **peak speed** (one decimal on screen, e.g. `45.3`; whole km/h on this LED module) stays on the
 laptop screen and on the Arduino LED display until the next pass. A pass faster than the **speed limit** is
@@ -52,6 +52,10 @@ only), lower it to 15 for a longer range. Speed accuracy is the same at every se
 **Long range (cars, outdoors):** TX attenuation 10, Min signal 15, Max speed 220, Speed limit 50.
 Maximum power: TX attenuation 0 with RX gain 20 (RX gain 30 clips).
 
+**Changing a default:** the sliders act at once but are not saved. To keep a value, open `EDIT_GNURADIO.bat`,
+double-click the slider block (`freq_mhz`, `max_kmh`, `limit_kmh`, `tx_atten`, `min_signal`, `rx_gain`),
+set **Default Value**, press OK, then Ctrl+S, and start the radar again.
+
 The **Doppler Speed Camera** block (`gnuradio/doppler_camera_block.py`) uses `doppler_core.py`, the same
 detector as the Python version: clutter map, mirror test, sub-bin peak, pass tracking and capture. The two
 versions therefore give identical speeds. The spectrum display is in Hz: km/h = Hz x c / (2 fc) x 3.6
@@ -60,8 +64,9 @@ versions therefore give identical speeds. The spectrum display is in Hz: km/h = 
 ## Python version
 
 `START_RADAR.bat` checks Python, installs the Python packages, installs the Pluto drivers if libiio is
-missing, finds the Pluto and the Arduino's COM port, and starts the radar with speed limit **50 km/h**.
-The same short-range defaults apply. To change them, edit `LIMIT`, `MAXKMH`, `FREQ_MHZ`, `MAX_SPEED`,
+missing, finds the Pluto and the Arduino's COM port, and starts the radar with the same defaults as the
+GNU Radio version (speed limit **10 km/h**, max speed 50 km/h, TX attenuation 20 dB, Min signal 15 dB).
+To change them, edit `LIMIT`, `MAXKMH`, `FREQ_MHZ`, `MAX_SPEED`,
 `TX_GAIN` and `MIN_SIGNAL` near the top of `START_RADAR.bat` (cars: `LIMIT=50`, `MAXKMH=60`,
 `MAX_SPEED=220`, `TX_GAIN=-10`, `MIN_SIGNAL=15`).
 
@@ -77,8 +82,8 @@ The same short-range defaults apply. To change them, edit `LIMIT`, `MAXKMH`, `FR
 | 6 | Install the Pluto USB driver and libiio (first time on a new laptop) |
 | 7 | Open `speed_log.csv` |
 
-The radar always uses the laptop speaker as the alarm; when an Arduino is found it also drives the LED display
-and buzzer.
+The Python version also beeps through the laptop speaker. Both versions drive the LED display and the buzzer
+when an Arduino is found.
 
 ## Folder contents
 
@@ -150,8 +155,10 @@ Buzzer, choose one (D9 and D10 are fixed: Timer1 outputs; D10 is the inverse of 
      With a piezo in C), put a 1 kOhm resistor across the buzzer. With 9 V, join the battery (-) to GND.
 ```
 
-The buzzer always plays at full volume (50 % square wave). Its pitch rises with speed (1.8-3.6 kHz,
-where a passive buzzer is loudest) and it beeps faster for a closer target.
+The buzzer always plays at full volume (50 % square wave) at 3.1-3.3 kHz, the resonance of the project's
+passive buzzer where it is loudest (measured with a microphone); the pitch rises slightly with speed. Beeps
+are long (75 % on) and come faster for a closer target (1-10 per second). For a different buzzer, set its
+loudest pitch in `speed_alarm.ino` (`float pitch = ...`).
 
 NPN pins, flat face toward you, legs down: **2N2222 = E B C**, **BC547 = C B E** (reversed).
 
@@ -176,7 +183,7 @@ Upload the sketch with `TOOLS.bat` option **5**, or in Arduino IDE:
 ## Command-line options
 
 ```
-python 02_doppler_radar.py [--max-kmh 60] [--limit 50] [--freq-mhz 2482] [--max-speed 220] [--port COM9 | --port auto] [--no-sound] [--rx-gain 30] [--tx-gain -10]
+python 02_doppler_radar.py [--max-kmh 10] [--limit 10] [--freq-mhz 2482] [--max-speed 50] [--min-signal 15] [--port COM9 | --port auto] [--no-sound] [--rx-gain 30] [--tx-gain -20]
 ```
 
 | Option | Meaning |
@@ -185,11 +192,11 @@ python 02_doppler_radar.py [--max-kmh 60] [--limit 50] [--freq-mhz 2482] [--max-
 | `--limit` | Speed limit in km/h: faster passes are captured (default: same as `--max-kmh`) |
 | `--freq-mhz` | Carrier frequency, 325..3800 MHz (use 2400-2483 with the 2.4 GHz antennas) |
 | `--max-speed` | Highest speed searched in km/h (default 50, up to ~740 at 2482 MHz) |
-| `--min-signal` | Min target signal in dB (default 35 = close targets only, 15 = longest range) |
+| `--min-signal` | Min target signal in dB (default 15 = longest range; higher = only closer targets) |
 | `--port` | Arduino COM port, or `auto`; sends `S<kmh>,P<proximity>,V<volume>,L<last kmh>,F<captured>` lines at 115200 baud |
 | `--no-sound` | Turn off the laptop-speaker alarm |
 | `--rx-gain` | RX gain, 0..70 dB. Lower it if the screen shows `CLIPPING` |
-| `--tx-gain` | TX attenuation, 0 (max power) to -89 dB (default -30 = short range; -10 for long range) |
+| `--tx-gain` | TX attenuation, 0 (max power) to -89 dB (default -20; -30 = shorter range, -10 = long range) |
 
 On exit (window closed, Ctrl+C, console closed or a startup error) the program destroys the TX buffer
 and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
@@ -200,7 +207,9 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 |---|---|
 | `DATA LOST: computer too slow` | Plug in the charger (on battery Windows slows the CPU) and close other programs |
 | Wrong or jumping speeds with several people in view | The radar reports the strongest echo; test with one moving person or vehicle at a time |
-| `CLIPPING` on screen | Lower `--rx-gain` (e.g. 20), or separate the TX and RX antennas |
+| `CLIPPING` (Python) / `!! CLIPPING` (GNU Radio) | Lower the RX gain (e.g. 20) or raise the TX attenuation, or separate the TX and RX antennas |
+| Buzzer quiet or silent | Wire it between D9 and D10 (or D9 and GND), legs fully in the breadboard; replug the USB and listen for the start-up chirp. For more volume use the BC547 driver with 9 V |
+| Slider changes are lost after a restart | Sliders are not saved: change the Default Value in `EDIT_GNURADIO.bat` (see above) |
 | False targets with no one moving | Turn off ceiling fans; point the antennas away from moving objects |
 | Noisy spectrum / only strong targets detected | Tighten every SMA connector by hand, keep the Pluto, cables and antennas off the laptop (fan vibration) and away from moving objects. For Wi-Fi interference move the Frequency slider (`--freq-mhz`) |
 | GNU Radio window does not open / `No Pluto device found` | Check `pluto_uri` (default `ip:192.168.2.1`) and close other radar windows |
@@ -219,7 +228,7 @@ and sets TX attenuation to -89 dB, so the Pluto stops transmitting.
 | Sample rate | 1 MS/s, decimated to 8 kS/s |
 | FFT | 2048 points (0.26 s), 3.9 Hz bins (0.85 km/h); parabolic peak interpolation gives a 0.1 km/h readout (measured error below 0.05 km/h) |
 | Response | Live speed about 0.15 s after movement starts; held (last) speed about 0.75 s after the target leaves |
-| Speed range | about 3.3 km/h up to the max-speed setting (default 220, up to ~740 km/h at 2482 MHz), approaching and receding |
+| Speed range | about 3.3 km/h up to the max-speed setting (default 50, up to ~740 km/h at 2482 MHz), approaching and receding |
 | Frequency | adjustable; 2400-2483 MHz with the 2.4 GHz antennas (Pluto range 325-3800 MHz) |
 | Clutter rejection | Mirror-peak test (fans) plus 2-frame confirmation |
 | Update rate | 64 ms per frame processed; window redrawn every 0.25 s so the loop keeps up on battery |

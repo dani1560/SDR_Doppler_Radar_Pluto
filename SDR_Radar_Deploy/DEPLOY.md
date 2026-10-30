@@ -76,14 +76,16 @@ else is needed.
 ## Step 6: Run
 
 **GNU Radio version (main demo):** double-click **`START_GNURADIO.bat`**. A window opens with the sliders
-(Frequency, Max speed, Speed limit, RX gain, TX attenuation), the live and held speed, the Doppler spectrum
-and the waterfall. Stand still for 3 s while it learns the background. Close the window to stop; the
+(Frequency, Max speed, Speed limit, RX gain, TX attenuation, Min signal), the live and held speed, the
+Doppler spectrum and the waterfall. Defaults: 2482 MHz, max speed 50 km/h, speed limit 10 km/h, TX
+attenuation 20 dB, Min signal 15 dB, RX gain 30 dB. Slider changes are not saved; to change a default,
+open `EDIT_GNURADIO.bat`, double-click the slider block, set Default Value, OK, Ctrl+S. Stand still for 3 s while it learns the background. Close the window to stop; the
 transmitter is muted automatically. To show the block diagram, double-click **`EDIT_GNURADIO.bat`**
 (GNU Radio Companion opens `gnuradio/doppler_radar.grc`; its Run button starts the radar too).
 
-**Python version (backup):** double-click **`START_RADAR.bat`**. It starts with speed limit 50 km/h. To
-change the limit, frequency or maximum speed, open `START_RADAR.bat` in Notepad and edit `LIMIT`,
-`FREQ_MHZ` and `MAX_SPEED` near the top.
+**Python version (backup):** double-click **`START_RADAR.bat`**. It uses the same defaults (speed limit
+10 km/h). To change them, open `START_RADAR.bat` in Notepad and edit `LIMIT`, `MAXKMH`, `FREQ_MHZ`,
+`MAX_SPEED`, `TX_GAIN` and `MIN_SIGNAL` near the top.
 
 To test or for walking demos, double-click **`TOOLS.bat`**:
 
@@ -92,7 +94,7 @@ To test or for walking demos, double-click **`TOOLS.bat`**:
 | **3** Test the Pluto | Plot with a strong peak at **+100 kHz**. Close the window. |
 | **4** Test the Arduino display | Display shows `15`, `35`, then `72` blinking |
 | **1** Run radar (walking) | Walk toward the antennas: speed on screen and LED, beeps from the laptop; captures over 10 km/h |
-| **2** Run radar (cars) | Same as `START_RADAR.bat`: captures over 50 km/h |
+| **2** Run radar (cars) | Captures over 50 km/h |
 
 The LED shows whole km/h (`45`); the screen and the log show one decimal (`45.3`).
 
@@ -129,3 +131,4 @@ Pluto Rx -- extension cable (0.5-1 m) -- antenna, upright
 | `Arduino : not found` | CH340 driver, other USB cable (Step 4) |
 | `Cannot open Arduino port` / `Access is denied` | Close the Arduino IDE and its Serial Monitor |
 | Speeds appear with nobody moving | Fans or moving objects in view; point the antennas elsewhere |
+| Buzzer quiet or silent | Buzzer between D9 and D10 (or D9 and GND), legs fully in; replug the USB and listen for the chirp |

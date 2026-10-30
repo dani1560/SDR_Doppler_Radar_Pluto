@@ -7,7 +7,7 @@
 
   Buzzer behaviour:
     - volume                   always maximum (50 % square wave, push-pull on D9/D10)
-    - pitch (1.8-3.6 kHz)      follows speed     -> faster target = higher tone
+    - pitch 3.1-3.3 kHz        the buzzer's resonance (loudest); rises a little with speed
     - beep rate (1..10 /s)     follows proximity -> closer target = faster beeps
     - silent when no target, or when no data arrives for 0.5 s
 
@@ -149,7 +149,7 @@ void setup() {
 
   display.setBrightness(7);       // 0..7
   display.showNumberDecEx(8888, 0b11100000);  // display test: "8.8.8.8." (or "88:88" on colon modules)
-  buzzerOn(2700);                 // start-up chirp: buzzer wired correctly
+  buzzerOn(3200);                 // start-up chirp: buzzer wired correctly
   delay(1000);
   buzzerOff();
   showTenths(-1);
@@ -180,10 +180,10 @@ void loop() {
 
   float beepsPerSec = 1.0 + 9.0 * proximity / 100.0;
   unsigned long period = (unsigned long)(1000.0 / beepsPerSec);
-  bool beepOn = (millis() % period) < period / 2;      // 50 % on / off
+  bool beepOn = (millis() % period) < period * 3 / 4;  // 75 % on: long, loud beeps
 
   if (beepOn) {
-    float pitch = 1800.0 + 18.0 * volume;               // 1800 .. 3600 Hz, where a passive buzzer is loudest
+    float pitch = 3100.0 + 2.0 * volume;                // 3100 .. 3300 Hz: this buzzer's resonance (loudest, measured)
     buzzerOn(pitch);
     digitalWrite(LED_PIN, HIGH);
   } else {

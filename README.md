@@ -10,12 +10,12 @@ A continuous-wave (CW) Doppler radar built on an **ADALM-PLUTO** software-define
 - **adjustable frequency** (2400-2483 MHz) and **maximum speed** (up to ~740 km/h), live from GNU Radio sliders
 - holds each pass's **peak speed** until the next pass
 - **captures** passes faster than a set speed limit (red on screen, blinking on the LED, logged)
-- sounds an alarm: louder and higher-pitched for faster targets, faster beeps for closer ones
+- sounds a buzzer alarm at full volume: faster beeps for closer targets, slightly higher pitch for faster ones
 - logs every pass to `speed_log.csv` (date, time, speed, direction, limit, captured)
 
 ![GNU Radio radar controls](photos/gnuradio_controls.png)
 
-![Doppler spectrum with a 45 km/h test target](photos/gnuradio_spectrum.png)
+![Doppler spectrum with a 25 km/h test target](photos/gnuradio_spectrum.png)
 
 ## How it works
 
@@ -27,7 +27,7 @@ Laptop ──USB── Arduino Nano ── TM1637 LED display + buzzer
 
 The Pluto transmits a CW tone at 2.482 GHz. The echo from a moving target is shifted by the Doppler
 frequency `fd = 2·v·fc / c`. The GNU Radio flowgraph (`SDR_Radar_Deploy/gnuradio/doppler_radar.grc`)
-mixes the echo down and decimates it to 8 kS/s; its Doppler Speed Camera block takes a 4096-point FFT,
+mixes the echo down and decimates it to 8 kS/s; its Doppler Speed Camera block takes a 2048-point FFT,
 finds the Doppler peak and converts it to speed: `v = fd · c / (2·fc)`. The Python version uses the same
 detector (`doppler_core.py`).
 
@@ -35,7 +35,7 @@ detector (`doppler_core.py`).
 |---|---|
 | Carrier | 2.482 GHz default, adjustable 2400-2483 MHz (2.4 GHz ISM band) |
 | FFT | 2048 points over 0.26 s, 3.9 Hz bins, 0.1 km/h readout (peak interpolation) |
-| Speed range | about 3.3 km/h to the max-speed setting (default 220, up to ~740 km/h), approaching and receding |
+| Speed range | about 3.3 km/h to the max-speed setting (default 50, up to ~740 km/h), approaching and receding |
 | Update rate | 64 ms; held speed on the LED about 0.75 s after the target leaves |
 
 ## Quick start
