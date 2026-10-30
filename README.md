@@ -13,6 +13,8 @@ A continuous-wave (CW) Doppler radar built on an **ADALM-PLUTO** software-define
 - sounds a buzzer alarm at full volume: faster beeps for closer targets, slightly higher pitch for faster ones
 - logs every pass to `speed_log.csv` (date, time, speed, direction, limit, captured)
 
+![GNU Radio Companion flowgraph](photos/gnuradio_flowgraph.png)
+
 ![GNU Radio radar controls](photos/gnuradio_controls.png)
 
 ![Doppler spectrum with a 25 km/h test target](photos/gnuradio_spectrum.png)

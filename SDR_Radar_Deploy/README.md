@@ -31,6 +31,8 @@ PlutoSDR Source (RX, fc) --> Frequency Xlating FIR (tone -> 0 Hz, /25) --> FIR F
     --> QT GUI Frequency Sink (Doppler spectrum) and Waterfall
 ```
 
+![GNU Radio Companion flowgraph](../photos/gnuradio_flowgraph.png)
+
 Sliders in the window (they act immediately, no restart):
 
 | Slider | Range | Notes |
