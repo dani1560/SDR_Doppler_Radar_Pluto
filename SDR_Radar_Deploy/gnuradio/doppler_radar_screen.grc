@@ -1,0 +1,1584 @@
+options:
+  parameters:
+    author: SDR Doppler Radar Project Team
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: 'Dual-frequency CW radar on the ADALM-PLUTO: speed from the Doppler shift, range from the phase difference of two tones; radar console with PPI display, velocity map, Doppler profile'
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: doppler_radar_screen
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: SDR Doppler Radar - Radar Console (PlutoSDR, speed + range)
+    window_size: (1600,950)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 8.0
+    rotation: 0
+    state: enabled
+blocks:
+- name: arduino_port
+  id: variable
+  parameters:
+    comment: ''
+    value: '''auto'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 488
+    - 12
+    rotation: 0
+    state: enabled
+- name: freq_mhz
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 0,0,1,1
+    label: Frequency (MHz)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '2400'
+    step: '1'
+    stop: '2483'
+    value: '2482'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 136.0
+    rotation: 0
+    state: enabled
+- name: fs_doppler
+  id: variable
+  parameters:
+    comment: ''
+    value: '8000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 376
+    - 12
+    rotation: 0
+    state: enabled
+- name: limit_kmh
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 1,0,1,1
+    label: Speed limit - capture above (km/h)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '5'
+    step: '5'
+    stop: '300'
+    value: '10'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 352
+    - 112.0
+    rotation: 0
+    state: enabled
+- name: max_kmh
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 0,1,1,1
+    label: Max speed (km/h)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '10'
+    step: '10'
+    stop: '740'
+    value: '50'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 184
+    - 128.0
+    rotation: 0
+    state: enabled
+- name: min_signal
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 2,1,1,1
+    label: 'Min signal (dB): higher = only close targets'
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '10'
+    step: '1'
+    stop: '50'
+    value: '15'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 968
+    - 180
+    rotation: 0
+    state: enabled
+- name: pluto_uri
+  id: variable
+  parameters:
+    comment: ''
+    value: '''ip:192.168.2.1'''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 600
+    - 12
+    rotation: 0
+    state: enabled
+- name: rx_gain
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 1,1,1,1
+    label: RX gain (dB)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '0'
+    step: '1'
+    stop: '70'
+    value: '30'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 584
+    - 100
+    rotation: 0
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: '4000000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 184
+    - 12
+    rotation: 0
+    state: enabled
+- name: tone_hz
+  id: variable
+  parameters:
+    comment: tone A (Hz from the carrier)
+    value: '-1300000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 280
+    - 12
+    rotation: 0
+    state: enabled
+- name: tx_atten
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 2,0,1,1
+    label: 'TX attenuation (dB): higher = shorter range'
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '0'
+    step: '1'
+    stop: '89'
+    value: '10'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 776
+    - 100
+    rotation: 0
+    state: enabled
+- name: analog_sig_source_x_0
+  id: analog_sig_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    amp: '0.35'
+    comment: ''
+    freq: tone_hz
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    showports: 'False'
+    type: complex
+    waveform: analog.GR_COS_WAVE
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 288.0
+    rotation: 0
+    state: enabled
+- name: epy_block_0
+  id: epy_block
+  parameters:
+    _source_code: |
+      """
+      Doppler Speed + Range Camera - GNU Radio embedded Python block of doppler_radar_screen.grc.
+
+      Inputs: two complex Doppler signals at 8 kS/s, one for each transmitted tone (tone A and tone B, delta_f apart),
+      mixed to 0 Hz by identical filter chains.
+      Speed: input 0 goes through the same processing as the normal radar (doppler_core.py: clutter map, mirror test,
+      sub-bin peak, pass tracking, capture over the speed limit, speed_log.csv, Arduino LED/buzzer).
+      Range (dual-frequency CW): a moving target appears at the same Doppler bin in both inputs. Its echo is delayed by
+      2R/c, so the phase difference between the two inputs at that bin is -4 pi delta_f R / c. The TX->RX leakage
+      (the 0 Hz part of each input, range ~0) gives the reference phase, which cancels the unknown start offset
+      between the Pluto's transmit and receive streams:
+          R = -c / (4 pi delta_f) * wrap(phase_target - phase_leakage) (mod c / (2 delta_f)) + range offset
+      """
+      import os
+      import sys
+      from collections import deque
+      import numpy as np
+      from gnuradio import gr
+
+
+      def _import_core():
+          """doppler_core.py lives in SDR_Radar_Deploy, one folder above this flowgraph."""
+          try:
+              here = os.path.dirname(os.path.abspath(__file__))
+          except NameError:                                   # GRC loads the block source without __file__
+              here = os.getcwd()
+          for d in (here, os.path.dirname(here), os.getcwd(), os.path.dirname(os.getcwd())):
+              if os.path.exists(os.path.join(d, "doppler_core.py")):
+                  if d not in sys.path:
+                      sys.path.insert(0, d)
+                  import doppler_core
+                  return doppler_core, d
+          raise ImportError("doppler_core.py not found: keep the gnuradio folder inside SDR_Radar_Deploy")
+
+
+      CLIP_LEVEL = 0.9    # leakage tone above 90 % of ADC full scale = receiver overload
+      C = 299792458.0
+      RANGE_AVG = 7       # median of this many range readings (about 0.45 s)
+
+
+      class blk(gr.sync_block):
+          """Doppler Speed + Range Camera: speed in km/h, range in m (dual-frequency CW), capture, log, Arduino"""
+
+          def __init__(self, freq_mhz=2482.0, max_kmh=50.0, limit_kmh=10.0, alarm_kmh=10.0, arduino_port="auto",
+                       pluto_uri="ip:192.168.2.1", min_signal_db=15.0, tone_a_hz=-1.3e6, tone_b_hz=1.7e6,
+                       range_offset_m=0.0):
+              gr.sync_block.__init__(self, name="Doppler Speed + Range Camera", in_sig=[np.complex64, np.complex64],
+                                     out_sig=None)
+              # GRC updates these attributes when the controls change; work() applies them
+              self.freq_mhz, self.max_kmh, self.limit_kmh = freq_mhz, max_kmh, limit_kmh
+              self.alarm_kmh, self.arduino_port, self.pluto_uri = alarm_kmh, arduino_port, pluto_uri
+              self.min_signal_db = min_signal_db
+              self.tone_a_hz, self.tone_b_hz, self.range_offset_m = tone_a_hz, tone_b_hz, range_offset_m
+              self.dc, base = _import_core()
+              self.log_file = os.path.join(base, "speed_log.csv")
+              self.det = self.cam = None
+              self.applied = None
+              self.buf_a = np.zeros(0, np.complex64)
+              self.buf_b = np.zeros(0, np.complex64)
+              self.hist_b = np.zeros(self.dc.NFFT, complex)
+              self.kmh = self.snr = 0.0                       # latest frame, for the display
+              self.range_m = None                             # measured range of the current target (m)
+              self.ranges = deque(maxlen=RANGE_AVG)
+              self.level = 0.0                                # TX->RX leakage level (1.0 = ADC full scale)
+              self.arduino = None
+
+          @property
+          def delta_f(self):
+              return abs(float(self.tone_b_hz) - float(self.tone_a_hz))
+
+          @property
+          def max_unambiguous_m(self):
+              return C / (2 * self.delta_f)
+
+          # --- GNU Radio start/stop --------------------------------------------------------------------
+          def start(self):
+              self._apply_settings()
+              port = str(self.arduino_port).strip()
+              if port.lower() == "auto":
+                  try:
+                      from arduino_port import find_arduino_port
+                      port = find_arduino_port() or ""
+                  except ImportError:
+                      port = ""
+              if port and port.lower() != "none":
+                  try:
+                      import serial
+                      import time
+                      self.arduino = serial.Serial(port, 115200, timeout=0)
+                      time.sleep(2)                           # Nano resets when the port opens
+                      print(f"Doppler camera: sending speed to Arduino on {port}")
+                  except Exception as e:                      # radar keeps running without the display
+                      print(f"Doppler camera: Arduino on {port} not available ({e})")
+                      self.arduino = None
+              return True
+
+          def stop(self):
+              if self.cam:
+                  self.cam.finish()                           # log a pass still in progress
+              if self.arduino:
+                  try:
+                      self.arduino.write(self.cam.arduino_line(0, 0, self.alarm_kmh).encode())
+                      self.arduino.close()
+                  except Exception:
+                      pass
+                  self.arduino = None
+              self._mute_tx()
+              return True
+
+          def _mute_tx(self):
+              """The PlutoSDR Sink leaves the TX LO on when the flowgraph stops: set -89 dB so nothing radiates."""
+              try:
+                  import iio
+                  phy = iio.Context(str(self.pluto_uri)).find_device("ad9361-phy")
+                  phy.find_channel("voltage0", True).attrs["hardwaregain"].value = "-89"
+                  print("Doppler camera: transmitter muted (-89 dB)")
+              except Exception as e:
+                  print(f"Doppler camera: could not mute the transmitter ({e})")
+
+          # --- settings from the GUI controls -----------------------------------------------------------
+          def _apply_settings(self):
+              fc = float(self.freq_mhz) * 1e6
+              settings = (fc, float(self.max_kmh), float(self.limit_kmh), float(self.min_signal_db))
+              if settings == self.applied:
+                  return
+              dc = self.dc
+              max_doppler = dc.kmh_to_doppler(min(float(self.max_kmh), dc.max_speed_kmh(fc)), fc)
+              if self.det is None:
+                  self.det = dc.Detector(max_doppler, float(self.min_signal_db))
+                  self.cam = dc.SpeedCamera(fc, float(self.limit_kmh), self.log_file)
+              else:
+                  if self.applied[0] != fc:
+                      self.det.reset()                        # new frequency: learn the background again
+                  self.det.set_max_doppler(max_doppler)
+                  self.det.detect_db = float(self.min_signal_db)
+                  self.cam.fc, self.cam.limit = fc, float(self.limit_kmh)
+              self.applied = settings
+              print(f"Doppler camera: {fc / 1e6:g} MHz, speeds up to "
+                    f"{dc.doppler_to_kmh(self.det.max_doppler_hz, fc):.0f} km/h, limit {float(self.limit_kmh):g} km/h, "
+                    f"min signal {float(self.min_signal_db):g} dB, range by 2 tones {self.delta_f / 1e6:g} MHz apart "
+                    f"(unambiguous {self.max_unambiguous_m:.0f} m)")
+
+          # --- processing --------------------------------------------------------------------------------
+          def work(self, input_items, output_items):
+              self._apply_settings()
+              dc, n = self.dc, len(input_items[0])
+              self.buf_a = np.concatenate([self.buf_a, input_items[0]])
+              self.buf_b = np.concatenate([self.buf_b, input_items[1][:n]])
+              while len(self.buf_a) >= dc.FRAME and len(self.buf_b) >= dc.FRAME:
+                  fa, self.buf_a = self.buf_a[:dc.FRAME], self.buf_a[dc.FRAME:]
+                  fb, self.buf_b = self.buf_b[:dc.FRAME], self.buf_b[dc.FRAME:]
+                  self.hist_b = np.concatenate([self.hist_b[len(fb):], fb.astype(complex)])
+                  p_db, thr_db, noise_db, k, snr, confirmed = self.det(fa.astype(complex))
+                  kmh, proximity, ended = self.cam.update(self.det, p_db, k, snr, confirmed)
+                  self.kmh, self.snr = kmh, snr
+                  self.level = float(np.abs(fa).mean())
+                  if proximity > 0:
+                      r = self._range(k)
+                      if r is not None:
+                          self.ranges.append(r)
+                      self.range_m = float(np.median(self.ranges)) if self.ranges else None
+                  else:
+                      self.ranges.clear()
+                      self.range_m = None
+                  if self.arduino:
+                      try:
+                          self.arduino.write(self.cam.arduino_line(kmh, proximity, float(self.alarm_kmh)).encode())
+                      except Exception:
+                          self.arduino = None
+              return n
+
+          def _range(self, k):
+              """Range (m) of the echo at Doppler bin k from the phase difference between the two tones."""
+              ha, hb = self.det.history, self.hist_b
+              la, lb = ha.mean(), hb.mean()                   # TX->RX leakage of each tone: the reference
+              if abs(la) == 0 or abs(lb) == 0:
+                  return None
+              w = self.det.window
+              A = np.fft.fftshift(np.fft.fft((ha - la) * w))
+              B = np.fft.fftshift(np.fft.fft((hb - lb) * w))
+              sl = slice(max(k - 1, 0), k + 2)
+              target = np.angle(np.sum(B[sl] * np.conj(A[sl])))
+              ref = np.angle(lb * np.conj(la))
+              d = np.angle(np.exp(1j * (target - ref)))     # wrap to -pi..pi
+              sign = 1.0 if float(self.tone_b_hz) > float(self.tone_a_hz) else -1.0
+              r = (-sign * d * C / (4 * np.pi * self.delta_f)) % self.max_unambiguous_m
+              return float(r + float(self.range_offset_m))
+
+          # --- display text (kept for the console and for debugging) ---------------------------------------
+          def live_text(self):
+              warn = "   !! CLIPPING: raise TX attenuation or lower RX gain" if self.level > CLIP_LEVEL else ""
+              if self.det is None or not self.det.ready:
+                  return "learning background ... stand still" + warn
+              if self.kmh == 0:
+                  return "no target" + warn
+              way = "approaching" if self.kmh > 0 else "receding"
+              rng = f"  at {self.range_m:.1f} m" if self.range_m is not None else ""
+              flag = "   OVER LIMIT" if abs(self.kmh) > float(self.limit_kmh) else ""
+              return f"{abs(self.kmh):.1f} km/h {way}{rng}   (signal {self.snr:.0f} dB){flag}{warn}"
+    affinity: ''
+    alarm_kmh: max(limit_kmh, 10)
+    alias: ''
+    arduino_port: arduino_port
+    comment: ''
+    freq_mhz: freq_mhz
+    limit_kmh: limit_kmh
+    max_kmh: max_kmh
+    maxoutbuf: '0'
+    min_signal_db: min_signal
+    minoutbuf: '0'
+    pluto_uri: pluto_uri
+    tone_a_hz: tone_hz
+    tone_b_hz: tone_b
+    range_offset_m: range_offset
+  states:
+    _io_cache: '(''Doppler Speed Camera'', ''blk'', [(''freq_mhz'', ''2482.0''), (''max_kmh'', ''50.0''), (''limit_kmh'', ''10.0''), (''alarm_kmh'', ''10.0''), (''arduino_port'', "''auto''"), (''pluto_uri'', "''ip:192.168.2.1''"), (''min_signal_db'', ''15.0'')], [(''0'', ''complex'', 1)], [], ''Doppler Speed Camera: speed in km/h, last-speed hold, capture over the limit, log, Arduino'', [''alarm_kmh'', ''arduino_port'', ''freq_mhz'', ''limit_kmh'', ''max_kmh'', ''min_signal_db'', ''pluto_uri''])'
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 880
+    - 480
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_0
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    decim: '10'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: firdes.low_pass_2(1.0, samp_rate/50, 3500, 500, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 640
+    - 460
+    rotation: 0
+    state: enabled
+- name: freq_xlating_fir_filter_xxx_0
+  id: freq_xlating_fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    center_freq: tone_hz
+    comment: ''
+    decim: '50'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: samp_rate
+    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 384
+    - 460
+    rotation: 0
+    state: enabled
+- name: iio_pluto_sink_0
+  id: iio_pluto_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    attenuation1: tx_atten
+    bandwidth: samp_rate
+    buffer_size: '32760'
+    comment: 'cyclic: the 2-tone buffer repeats in the Pluto, no TX data over USB'
+    cyclic: 'True'
+    filter: ''''''
+    filter_source: '''Auto'''
+    fpass: '0'
+    frequency: int(freq_mhz*1e6)
+    fstop: '0'
+    len_tag_key: ''''''
+    samplerate: samp_rate
+    type: fc32
+    uri: pluto_uri
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 400
+    - 276
+    rotation: 0
+    state: enabled
+- name: iio_pluto_source_0
+  id: iio_pluto_source
+  parameters:
+    affinity: ''
+    alias: ''
+    bandwidth: samp_rate
+    bbdc: 'True'
+    buffer_size: '65536'
+    comment: ''
+    filter: ''''''
+    filter_source: '''Auto'''
+    fpass: '0'
+    frequency: int(freq_mhz*1e6)
+    fstop: '0'
+    gain1: '''manual'''
+    len_tag_key: ''''''
+    manual_gain1: rx_gain
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    quadrature: 'True'
+    rfdc: 'True'
+    samplerate: samp_rate
+    type: fc32
+    uri: pluto_uri
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 72
+    - 472.0
+    rotation: 0
+    state: enabled
+- name: tone_b
+  id: variable
+  parameters:
+    comment: 'tone B: 3 MHz above tone A -> range up to c/(2*3 MHz) = 50 m'
+    value: '1700000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 280
+    - 76
+    rotation: 0
+    state: enabled
+- name: range_m
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 3,0,1,1
+    label: Max range on the display (m)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '2'
+    step: '1'
+    stop: '50'
+    value: '12'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 968
+    - 260
+    rotation: 0
+    state: enabled
+- name: range_offset
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 3,1,1,1
+    label: 'Range offset (m): calibration'
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '-10'
+    step: '0.1'
+    stop: '10'
+    value: '0'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 968
+    - 330
+    rotation: 0
+    state: enabled
+- name: analog_sig_source_x_1
+  id: analog_sig_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    amp: '0.35'
+    comment: ''
+    freq: tone_b
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    showports: 'False'
+    type: complex
+    waveform: analog.GR_COS_WAVE
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 8
+    - 400
+    rotation: 0
+    state: enabled
+- name: blocks_add_xx_0
+  id: blocks_add_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: two-tone transmit signal
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '2'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 216
+    - 320
+    rotation: 0
+    state: enabled
+- name: freq_xlating_fir_filter_xxx_1
+  id: freq_xlating_fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    center_freq: tone_b
+    comment: ''
+    decim: '50'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: samp_rate
+    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 384
+    - 580
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_1
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    decim: '10'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: firdes.low_pass_2(1.0, samp_rate/50, 3500, 500, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 640
+    - 580
+    rotation: 0
+    state: enabled
+- name: snippet_0
+  id: snippet
+  parameters:
+    alias: ''
+    comment: Adds the radar console (Python Module radar_screen) to this window
+    priority: '0'
+    section: main_after_init
+    code: radar_screen.attach(self)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1160
+    - 260
+    rotation: 0
+    state: enabled
+- name: radar_screen
+  id: epy_module
+  parameters:
+    alias: ''
+    comment: 'Radar console: PPI display, velocity map, Doppler profile, controls'
+    source_code: |
+      """
+      Radar screen: Python Module block "radar_screen" of the GNU Radio flowgraph doppler_radar_screen.grc.
+
+      The flowgraph's Python Snippet block (Main - After Init) calls radar_screen.attach(self). The screen replaces the
+      plain sliders with a radar console in the same GNU Radio window:
+        - left:   Radar Controls (frequency, TX attenuation, RX gain, min signal, max speed, speed limit, Start / Stop),
+                  Display Options (range rings, crosshair, velocity map, colour map, max range) and Targets Info
+        - centre: PPI display - echo strength of detected targets on the fixed antenna beam, with persistence
+        - right:  Doppler velocity map of the antenna beam and the Doppler profile (power against speed)
+        - bottom: status bar (PlutoSDR, sample rate, processing, clock)
+      The controls call the flowgraph's own variable setters (set_tx_atten, set_rx_gain, ...), so they act on the GNU
+      Radio blocks exactly like the sliders. Ten times a second the screen reads the Doppler Speed + Range Camera block
+      (epy_block_0). The radar transmits two CW tones: speed and direction come from the Doppler shift, the range from
+      the phase difference between the two tones (dual-frequency CW). The bearing inside the antenna beam is not
+      measured, so a target is drawn across the beam at its measured range.
+      """
+      import math
+      import time
+      from datetime import datetime
+
+      import numpy as np
+      from PyQt5 import QtCore, QtGui, QtWidgets
+
+      BEAM_DEG = 30            # half width of the antenna beam (patch / Yagi: about 60 deg)
+      ANG, RNG = 360, 200      # echo map: 1 deg x (max range / 200)
+      DECAY = 0.94             # echo persistence per update (0.1 s): fades in about 4 s
+      ECHO_TOP_DB = 60         # colour scale of the PPI: 0 .. 60 dB above the noise
+      CLIP_LEVEL = 0.9         # same overload level as the camera block
+      NO_DATA_S = 2.0          # no new frame for this long = no samples from the Pluto
+
+      COL = {"bg": "#0a1020", "panel": "#0f1b33", "border": "#2a4a7f", "text": "#e8eef8", "dim": "#9fb0c8",
+             "green": "#22c55e", "red": "#ef4444", "amber": "#f59e0b", "yellow": "#ffe600", "cyan": "#22d3ee"}
+
+      WINDOW_QSS = f"""
+      QWidget {{ background-color: {COL['bg']}; color: {COL['text']}; font-family: 'Segoe UI'; font-size: 10pt; }}
+      QScrollArea {{ border: none; }}
+      QFrame#panel {{ background: {COL['panel']}; border: 1px solid {COL['border']}; border-radius: 6px; }}
+      QLabel#head {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2b5797, stop:1 #1a3766);
+          color: white; font-size: 11pt; font-weight: 700; padding: 5px 10px; border-top-left-radius: 6px;
+          border-top-right-radius: 6px; }}
+      QLabel {{ background: transparent; }}
+      QWidget#body {{ background: transparent; }}
+      QDoubleSpinBox, QComboBox {{ background: #16264a; border: 1px solid {COL['border']}; border-radius: 4px;
+          padding: 2px 6px; color: {COL['text']}; font-size: 10.5pt; min-height: 20px; }}
+      QCheckBox {{ background: transparent; font-size: 10.5pt; spacing: 8px; }}
+      QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 3px; border: 1px solid {COL['border']};
+          background: #16264a; }}
+      QCheckBox::indicator:checked {{ background: #2f7de1; border: 1px solid #5aa0ff; image: url(CHECK_PNG); }}
+      QPushButton#start {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #22a845, stop:1 #15782f);
+          color: white; font-size: 12pt; font-weight: 700; border-radius: 5px; padding: 8px; }}
+      QPushButton#stop {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #b3303a, stop:1 #7c1d25);
+          color: white; font-size: 12pt; font-weight: 700; border-radius: 5px; padding: 8px; }}
+      QPushButton:disabled {{ background: #2a3550; color: #7d8aa3; }}
+      QFrame#status {{ background: #0c1528; border-top: 1px solid {COL['border']}; }}
+      """
+
+
+      def _cmap(stops):
+          x = np.linspace(0, 1, 256)
+          pos = [s[0] for s in stops]
+          ch = [np.interp(x, pos, [s[1][i] for s in stops]).astype(np.uint32) for i in range(3)]
+          return (0xFF000000 | (ch[0] << 16) | (ch[1] << 8) | ch[2]).astype(np.uint32)
+
+
+      CMAPS = {
+          "Jet": _cmap([(0, (0, 0, 140)), (0.12, (0, 0, 255)), (0.37, (0, 255, 255)), (0.62, (255, 255, 0)),
+                        (0.87, (255, 0, 0)), (1, (128, 0, 0))]),
+          "Viridis": _cmap([(0, (68, 1, 84)), (0.25, (59, 82, 139)), (0.5, (33, 145, 140)), (0.75, (94, 201, 98)),
+                            (1, (253, 231, 37))]),
+          "Grey": _cmap([(0, (40, 40, 40)), (1, (255, 255, 255))]),
+      }
+      BLACK = np.uint32(0xFF000000)
+      PANEL = np.uint32(0xFF000000 | int(COL["panel"][1:], 16))
+
+
+      def qc(name, alpha=255):
+          c = QtGui.QColor(COL.get(name, name))
+          c.setAlpha(alpha)
+          return c
+
+
+      # ------------------------------------------------------------------------------------------------------
+      # Reading the radar block
+      # ------------------------------------------------------------------------------------------------------
+      class RadarState:
+          def __init__(self):
+              self.phase = "starting"          # starting / stopped / no data / learning / running
+              self.kmh = self.snr = self.min_signal = self.fd = 0.0
+              self.limit, self.freq_mhz, self.max_kmh = 10.0, 2482.0, 50.0
+              self.clipping = False
+              self.last_kmh, self.last_time, self.last_captured = None, "", False
+              self.n_captured, self.top_kmh = 0, 0.0
+              self.spec_kmh = self.spec_db = self.spec_thr = None   # spectrum, dB above the noise floor
+              self.ignore_kmh = 0.0            # |speed| below this is ignored (TX leakage)
+              self.range_m = None              # measured range of the target (m)
+              self.delta_f = 3e6               # spacing of the two tones (Hz)
+
+          @property
+          def target(self):
+              return self.phase == "running" and self.kmh != 0
+
+          @property
+          def over(self):
+              return self.target and abs(self.kmh) > self.limit
+
+
+      class RadarReader:
+          def __init__(self, blk):
+              self.blk = blk
+              self.last_frame, self.last_change = -1, time.time()
+
+          def read(self, running=True):
+              s, blk = RadarState(), self.blk
+              det, cam, dc = getattr(blk, "det", None), getattr(blk, "cam", None), getattr(blk, "dc", None)
+              s.limit = float(getattr(blk, "limit_kmh", 10))
+              s.freq_mhz = float(getattr(blk, "freq_mhz", 2482))
+              if det is None or cam is None or dc is None:
+                  return s
+              now = time.time()
+              if det.frame != self.last_frame:
+                  self.last_frame, self.last_change = det.frame, now
+              fc = s.freq_mhz * 1e6
+              s.max_kmh = dc.doppler_to_kmh(det.max_doppler_hz, fc)
+              s.ignore_kmh = dc.doppler_to_kmh(dc.MIN_DOPPLER_HZ, fc)
+              s.min_signal = float(det.detect_db)
+              s.clipping = float(getattr(blk, "level", 0.0)) > CLIP_LEVEL
+              s.last_kmh, s.last_time, s.last_captured = cam.last_kmh, cam.last_time, cam.last_captured
+              s.n_captured, s.top_kmh = cam.n_captured, cam.top_kmh
+              if not running:
+                  s.phase = "stopped"
+              elif now - self.last_change > NO_DATA_S:
+                  s.phase = "no data"
+              elif not det.ready:
+                  s.phase = "learning"
+              else:
+                  s.phase = "running"
+                  s.kmh, s.snr = float(blk.kmh), float(blk.snr)
+                  s.fd = dc.kmh_to_doppler(s.kmh, fc)
+                  s.range_m = getattr(blk, "range_m", None)
+              s.delta_f = float(getattr(blk, "delta_f", 3e6))
+              self._spectrum(s, det, dc, fc)
+              return s
+
+          @staticmethod
+          def _spectrum(s, det, dc, fc):
+              """Same spectrum and threshold as the detector, for |speed| up to the max speed setting."""
+              h = det.history
+              if not np.any(h):
+                  return
+              spec = np.fft.fftshift(np.fft.fft((h - h.mean()) * det.window)) / dc.NFFT
+              p = 10 * np.log10(np.abs(spec) ** 2 + 1e-30)
+              noise = np.median(p[det.band])
+              thr = np.maximum(noise + det.detect_db,
+                               det.clutter_db + dc.CLUTTER_DB + dc.CLUTTER_K * np.sqrt(np.maximum(det.clutter_var, 0)))
+              kmh = dc.doppler_to_kmh(det.freqs, fc)
+              sel = np.abs(det.freqs) <= det.max_doppler_hz
+              s.spec_kmh, s.spec_db, s.spec_thr = kmh[sel], p[sel] - noise, thr[sel] - noise
+
+
+      def est_range(s, max_range):
+          """Measured range (m) of the target (dual-frequency CW), drawn at the edge if beyond Max Range."""
+          if s.range_m is None:
+              return max_range
+          return float(np.clip(s.range_m, 0.0, max_range))
+
+
+      class EchoMap:
+          """Echo strength and radial velocity over bearing x range, with persistence."""
+
+          def __init__(self):
+              self.power = np.zeros((ANG, RNG), np.float32)
+              self.vel = np.zeros((ANG, RNG), np.float32)
+              a = np.arange(ANG, dtype=float)
+              a = np.where(a > 180, a - 360, a)
+              w = np.exp(-0.5 * (a / (BEAM_DEG / 2.0)) ** 2)
+              w[np.abs(a) > BEAM_DEG * 1.2] = 0
+              self.ang_w = w                    # a target can be anywhere in the beam: spread over its width
+              self.rbins = (np.arange(RNG) + 0.5) / RNG
+
+          def update(self, s, r_frac):
+              self.power *= DECAY
+              if r_frac is None:
+                  return
+              rw = np.exp(-0.5 * ((self.rbins - r_frac) / 0.03) ** 2)
+              blob = np.outer(self.ang_w, rw).astype(np.float32)
+              val = blob * float(np.clip(s.snr, 0, ECHO_TOP_DB))
+              self.power = np.maximum(self.power, val)
+              self.vel = np.where(blob > 0.02, s.kmh / 3.6, self.vel).astype(np.float32)
+
+
+      # ------------------------------------------------------------------------------------------------------
+      # Displays
+      # ------------------------------------------------------------------------------------------------------
+      def draw_colorbar(p, rect, cmap, labels, title):
+          """Vertical colour bar, top = high."""
+          img = QtGui.QImage(1, 256, QtGui.QImage.Format_RGB32)
+          for i in range(256):
+              img.setPixel(0, 255 - i, int(cmap[i]))
+          p.drawImage(rect, img)
+          p.setPen(QtGui.QPen(qc("dim"), 1))
+          p.drawRect(rect)
+          f = p.font()
+          f.setPointSize(10)
+          f.setBold(True)
+          p.setFont(f)
+          p.setPen(qc("text"))
+          p.drawText(QtCore.QRectF(rect.right() + 46 - 170, rect.top() - 30, 170, 18), QtCore.Qt.AlignRight, title)
+          f.setBold(False)
+          f.setPointSize(9)
+          p.setFont(f)
+          for frac, text in labels:
+              y = rect.bottom() - frac * rect.height()
+              p.drawText(QtCore.QRectF(rect.right() + 5, y - 8, 50, 16), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter,
+                         text)
+
+
+      class PPI(QtWidgets.QWidget):
+          def __init__(self, screen):
+              super().__init__()
+              self.screen = screen
+              self.setMinimumSize(460, 460)
+              self._D = None
+
+          def _mapping(self, D):
+              if D == self._D:
+                  return
+              yy, xx = np.mgrid[0:D, 0:D].astype(float)
+              x, y = xx - (D - 1) / 2, yy - (D - 1) / 2
+              r = np.hypot(x, y) / (D / 2)
+              th = np.degrees(np.arctan2(x, -y)) % 360
+              self._ai = th.astype(int) % ANG
+              self._ri = np.clip((r * RNG).astype(int), 0, RNG - 1)
+              self._inside = r <= 1
+              self._D = D
+
+          def paintEvent(self, _):
+              sc = self.screen
+              p = QtGui.QPainter(self)
+              p.setRenderHint(QtGui.QPainter.Antialiasing)
+              w, h = self.width(), self.height()
+              p.fillRect(self.rect(), QtGui.QColor(0, 0, 0))
+              bar_w = 90
+              D = int(max(min(w - bar_w - 70, h - 80), 100))
+              cx, cy = (w - bar_w) / 2, h / 2 - 6
+              R = D / 2
+              self._mapping(D)
+              cmap = CMAPS[sc.cmap_name]
+              vals = sc.echo.power[self._ai, self._ri]
+              img = cmap[np.clip(vals / ECHO_TOP_DB * 255, 0, 255).astype(int)]
+              img = np.where(vals < 2.0, BLACK, img)
+              img = np.where(self._inside, img, np.uint32(0xFF000000)).astype(np.uint32)
+              qimg = QtGui.QImage(img.data, D, D, D * 4, QtGui.QImage.Format_RGB32).copy()
+              p.drawImage(QtCore.QRectF(cx - R, cy - R, D, D), qimg)
+              white = QtGui.QColor(235, 235, 235, 200)
+              # beam edges
+              p.setPen(QtGui.QPen(QtGui.QColor(90, 160, 255, 150), 1.2, QtCore.Qt.DashLine))
+              for b in (-BEAM_DEG, BEAM_DEG):
+                  a = math.radians(b)
+                  p.drawLine(QtCore.QPointF(cx, cy), QtCore.QPointF(cx + math.sin(a) * R, cy - math.cos(a) * R))
+              f = p.font()
+              f.setPointSize(9)
+              p.setFont(f)
+              if sc.show_rings:
+                  for i in range(1, 5):
+                      rr = R * i / 4
+                      p.setPen(QtGui.QPen(white, 1.2))
+                      p.setBrush(QtCore.Qt.NoBrush)
+                      p.drawEllipse(QtCore.QPointF(cx, cy), rr, rr)
+                      p.setPen(QtGui.QColor(255, 255, 255) if i == 4 else QtGui.QColor(200, 200, 200))
+                      f.setBold(i == 4)
+                      p.setFont(f)
+                      p.drawText(QtCore.QRectF(cx + 4, cy - rr + 1, 70, 16), QtCore.Qt.AlignLeft,
+                                 f"{sc.max_range * i / 4:g} m")
+                      f.setBold(False)
+                      p.setFont(f)
+              p.setPen(QtGui.QPen(QtGui.QColor(235, 235, 235, 110), 1))
+              for b in range(0, 360, 30):
+                  a = math.radians(b)
+                  p.drawLine(QtCore.QPointF(cx, cy), QtCore.QPointF(cx + math.sin(a) * R, cy - math.cos(a) * R))
+              if sc.show_cross:
+                  p.setPen(QtGui.QPen(white, 1.4))
+                  p.drawLine(QtCore.QPointF(cx - R, cy), QtCore.QPointF(cx + R, cy))
+                  p.drawLine(QtCore.QPointF(cx, cy - R), QtCore.QPointF(cx, cy + R))
+              f.setPointSize(11)
+              p.setFont(f)
+              p.setPen(QtGui.QColor(240, 240, 240))
+              for b in range(0, 360, 30):
+                  a = math.radians(b)
+                  p.drawText(QtCore.QRectF(cx + math.sin(a) * (R + 22) - 25, cy - math.cos(a) * (R + 22) - 10, 50, 20),
+                             QtCore.Qt.AlignCenter, f"{b}°")
+              s = sc.state
+              if s.target and s.range_m is not None:
+                  rr = est_range(s, sc.max_range) / sc.max_range * R
+                  p.setPen(QtGui.QColor(255, 255, 255))
+                  f.setPointSize(10)
+                  f.setBold(True)
+                  p.setFont(f)
+                  p.drawText(QtCore.QPointF(cx + 34, cy - rr + 4),
+                             f"T1  {abs(s.kmh):.1f} km/h   {s.range_m:.1f} m" if s.range_m is not None
+                             else f"T1  {abs(s.kmh):.1f} km/h")
+                  f.setBold(False)
+              msg = {"stopped": ("Radar stopped - press Start", "amber"),
+                     "no data": ("No samples from the Pluto - check the USB cable", "red"),
+                     "learning": ("Learning the background - stand still", "amber"),
+                     "starting": ("Starting ...", "amber")}.get(s.phase)
+              if msg:
+                  f.setPointSize(11)
+                  p.setFont(f)
+                  p.setPen(qc(msg[1]))
+                  p.drawText(QtCore.QRectF(0, cy + R * 0.45, w - bar_w, 24), QtCore.Qt.AlignCenter, msg[0])
+              f.setPointSize(12)
+              f.setBold(True)
+              p.setFont(f)
+              p.setPen(QtGui.QColor(240, 240, 240))
+              p.drawText(QtCore.QPointF(14, h - 14), f"Range: {sc.max_range:.1f} m")
+              f.setPointSize(13)
+              p.setFont(f)
+              p.setPen(qc("cyan"))
+              p.drawText(QtCore.QPointF(14, 28), f"RADAR RANGE: {sc.max_range:g} m")
+              f.setPointSize(9)
+              f.setBold(False)
+              p.setFont(f)
+              p.setPen(qc("dim"))
+              p.drawText(QtCore.QPointF(14, 46), "anything moving inside this circle is shown at its measured range")
+              f.setPointSize(9)
+              f.setBold(False)
+              p.setFont(f)
+              p.setPen(qc("dim"))
+              p.drawText(QtCore.QRectF(0, h - 26, w - bar_w - 10, 16), QtCore.Qt.AlignRight,
+                         "dashed = antenna beam   |   range measured with 2 tones (dual-frequency CW)")
+              bar = QtCore.QRectF(w - bar_w + 14, 40, 22, h - 110)
+              draw_colorbar(p, bar, cmap, [(i / 6, f"{i * 10}") for i in range(7)], "dB")
+              p.end()
+
+
+      class VelocityMap(QtWidgets.QWidget):
+          """Fan view of the antenna beam, coloured by the radial speed of the echoes (m/s, + = approaching)."""
+
+          SPAN = BEAM_DEG + 10
+
+          def __init__(self, screen):
+              super().__init__()
+              self.screen = screen
+              self.setMinimumSize(380, 250)
+              self._key = None
+
+          def _mapping(self, W, H, ax, ay, Rf):
+              key = (W, H)
+              if key == self._key:
+                  return
+              yy, xx = np.mgrid[0:H, 0:W].astype(float)
+              x, y = xx - ax, ay - yy
+              r = np.hypot(x, y) / Rf
+              th = np.degrees(np.arctan2(x, y))
+              self._ai = np.round(th).astype(int) % ANG
+              self._ri = np.clip((r * RNG).astype(int), 0, RNG - 1)
+              self._inside = (r <= 1) & (np.abs(th) <= self.SPAN) & (y >= 0)
+              self._key = key
+
+          def paintEvent(self, _):
+              sc = self.screen
+              p = QtGui.QPainter(self)
+              p.setRenderHint(QtGui.QPainter.Antialiasing)
+              w, h = self.width(), self.height()
+              p.fillRect(self.rect(), QtGui.QColor(0, 0, 0))
+              bar_w = 90
+              W, H = int(w - bar_w - 10), int(h - 16)
+              ax, ay = W / 2, H - 22
+              Rf = min(ay - 10, (W / 2 - 10) / math.sin(math.radians(self.SPAN)))
+              self._mapping(W, H, ax, ay, Rf)
+              cmap = CMAPS["Jet"]
+              vmax = max(sc.state.max_kmh / 3.6, 1.0)
+              pw = sc.echo.power[self._ai, self._ri]
+              vel = sc.echo.vel[self._ai, self._ri]
+              img = cmap[np.clip((vel / vmax * 0.5 + 0.5) * 255, 0, 255).astype(int)]
+              img = np.where(pw < 2.0, np.uint32(0xFF050A18), img)
+              img = np.where(self._inside, img, BLACK).astype(np.uint32)
+              qimg = QtGui.QImage(img.data, W, H, W * 4, QtGui.QImage.Format_RGB32).copy()
+              p.drawImage(QtCore.QRectF(0, 8, W, H), qimg)
+              oy = 8
+              p.setBrush(QtCore.Qt.NoBrush)
+              f = p.font()
+              f.setPointSize(9)
+              p.setFont(f)
+              for i in range(1, 5):
+                  rr = Rf * i / 4
+                  p.setPen(QtGui.QPen(QtGui.QColor(235, 235, 235, 120), 1))
+                  rect = QtCore.QRectF(ax - rr, ay + oy - rr, 2 * rr, 2 * rr)
+                  p.drawArc(rect, int((90 - self.SPAN) * 16), int(2 * self.SPAN * 16))
+                  p.setPen(QtGui.QColor(210, 210, 210))
+                  p.drawText(QtCore.QPointF(ax + 3, ay + oy - rr + 12), f"{sc.max_range * i / 4:g} m")
+              for b in (-self.SPAN, -BEAM_DEG, 0, BEAM_DEG, self.SPAN):
+                  a = math.radians(b)
+                  p.setPen(QtGui.QPen(QtGui.QColor(235, 235, 235, 150 if abs(b) != BEAM_DEG else 110), 1,
+                                      QtCore.Qt.SolidLine if abs(b) != BEAM_DEG else QtCore.Qt.DashLine))
+                  p.drawLine(QtCore.QPointF(ax, ay + oy), QtCore.QPointF(ax + math.sin(a) * Rf, ay + oy - math.cos(a) * Rf))
+              p.setPen(QtGui.QColor(240, 240, 240))
+              for b in (-BEAM_DEG, 0, BEAM_DEG):
+                  a = math.radians(b)
+                  p.drawText(QtCore.QRectF(ax + math.sin(a) * (Rf + 2) - 25, ay + oy - math.cos(a) * (Rf + 2) - 16, 50, 14),
+                             QtCore.Qt.AlignCenter, f"{b}°")
+              p.setPen(qc("dim"))
+              p.drawText(QtCore.QRectF(4, h - 18, W, 16), QtCore.Qt.AlignCenter, "antenna beam   |   + = approaching")
+              bar = QtCore.QRectF(w - bar_w + 14, 44, 22, h - 80)
+              draw_colorbar(p, bar, cmap, [(0, f"{-vmax:.0f}"), (0.25, f"{-vmax / 2:.0f}"), (0.5, "0"),
+                                           (0.75, f"+{vmax / 2:.0f}"), (1, f"+{vmax:.0f}")], "Velocity (m/s)")
+              p.end()
+
+
+      class DopplerProfile(QtWidgets.QWidget):
+          """Power (dB above the noise) against radial speed (m/s): the live Doppler spectrum."""
+
+          def __init__(self, screen):
+              super().__init__()
+              self.screen = screen
+              self.setMinimumSize(380, 230)
+
+          def paintEvent(self, _):
+              s = self.screen.state
+              p = QtGui.QPainter(self)
+              p.setRenderHint(QtGui.QPainter.Antialiasing)
+              w, h = self.width(), self.height()
+              p.fillRect(self.rect(), QtGui.QColor(0, 0, 0))
+              L, T, Rr, B = 64, 14, w - 18, h - 46
+              vmax = max(s.max_kmh / 3.6, 1.0)
+              X = lambda v: L + (v + vmax) / (2 * vmax) * (Rr - L)
+              Y = lambda db: B - np.clip(db, 0, 60) / 60 * (B - T)
+              f = p.font()
+              f.setPointSize(10)
+              p.setFont(f)
+              for db in range(0, 61, 20):
+                  p.setPen(QtGui.QPen(QtGui.QColor(120, 120, 120), 1))
+                  p.drawLine(QtCore.QPointF(L, Y(db)), QtCore.QPointF(Rr, Y(db)))
+                  p.setPen(QtGui.QColor(235, 235, 235))
+                  p.drawText(QtCore.QRectF(0, Y(db) - 9, L - 8, 18), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
+                             f"{db}")
+              for v in np.linspace(-vmax, vmax, 5):
+                  p.setPen(QtGui.QPen(QtGui.QColor(120, 120, 120), 1))
+                  p.drawLine(QtCore.QPointF(X(v), T), QtCore.QPointF(X(v), B))
+                  p.setPen(QtGui.QColor(235, 235, 235))
+                  p.drawText(QtCore.QRectF(X(v) - 30, B + 4, 60, 16), QtCore.Qt.AlignCenter, f"{v:+.0f}")
+              p.setPen(QtGui.QPen(QtGui.QColor(235, 235, 235), 1.2))
+              p.drawRect(QtCore.QRectF(L, T, Rr - L, B - T))
+              f.setBold(True)
+              p.setFont(f)
+              p.drawText(QtCore.QRectF(L, B + 22, Rr - L, 18), QtCore.Qt.AlignCenter, "Velocity (m/s)")
+              p.save()
+              p.translate(14, (T + B) / 2)
+              p.rotate(-90)
+              p.drawText(QtCore.QRectF(-60, -9, 120, 18), QtCore.Qt.AlignCenter, "Power (dB)")
+              p.restore()
+              f.setBold(False)
+              p.setFont(f)
+              ign = s.ignore_kmh / 3.6
+              p.fillRect(QtCore.QRectF(X(-ign), T, X(ign) - X(-ign), B - T), QtGui.QColor(90, 90, 90, 90))
+              if s.spec_kmh is not None and len(s.spec_kmh) > 2:
+                  v = s.spec_kmh / 3.6
+                  p.setPen(QtGui.QPen(QtGui.QColor(255, 150, 40, 200), 1.2, QtCore.Qt.DashLine))
+                  p.drawPolyline(QtGui.QPolygonF([QtCore.QPointF(X(a), Y(b)) for a, b in zip(v, s.spec_thr)]))
+                  p.setPen(QtGui.QPen(qc("yellow"), 2))
+                  p.drawPolyline(QtGui.QPolygonF([QtCore.QPointF(X(a), Y(b)) for a, b in zip(v, s.spec_db)]))
+              if s.target:
+                  vx = s.kmh / 3.6
+                  p.setPen(QtGui.QPen(qc("red" if s.over else "green"), 1.5, QtCore.Qt.DashLine))
+                  p.drawLine(QtCore.QPointF(X(vx), T), QtCore.QPointF(X(vx), B))
+                  lx = float(np.clip(X(vx), L + 125, Rr - 125))
+                  p.setPen(QtGui.QColor(255, 255, 255))
+                  p.drawText(QtCore.QRectF(lx - 125, T + 4, 250, 18), QtCore.Qt.AlignCenter,
+                             f"T1: {vx:+.1f} m/s  ({s.fd:+.0f} Hz)")
+              p.end()
+
+
+      # ------------------------------------------------------------------------------------------------------
+      # Console
+      # ------------------------------------------------------------------------------------------------------
+      def panel(title, body):
+          frame = QtWidgets.QFrame(objectName="panel")
+          lay = QtWidgets.QVBoxLayout(frame)
+          lay.setContentsMargins(0, 0, 0, 0)
+          lay.setSpacing(0)
+          lay.addWidget(QtWidgets.QLabel(title, objectName="head"))
+          if isinstance(body, QtWidgets.QLayout):
+              holder = QtWidgets.QWidget()
+              holder.setLayout(body)
+              body = holder
+          if not body.objectName():
+              body.setObjectName("body")
+          lay.addWidget(body, 1)
+          return frame
+
+
+      class RadarScreen(QtWidgets.QWidget):
+          def __init__(self, tb):
+              super().__init__()
+              self.tb = tb
+              self.reader = RadarReader(tb.epy_block_0)
+              self.echo = EchoMap()
+              self.state = RadarState()
+              self.running = True
+              self.show_rings = self.show_cross = True
+              self.cmap_name = "Jet"
+              self.max_range = float(getattr(tb, "range_m", 10))
+              self.setMinimumSize(1300, 760)
+
+              root = QtWidgets.QVBoxLayout(self)
+              root.setContentsMargins(4, 4, 4, 0)
+              root.setSpacing(6)
+              main = QtWidgets.QHBoxLayout()
+              main.setSpacing(8)
+              root.addLayout(main, 1)
+
+              # ---- left column ----
+              left = QtWidgets.QVBoxLayout()
+              left.setContentsMargins(0, 0, 0, 0)
+              left.setSpacing(8)
+              form = QtWidgets.QGridLayout()
+              form.setContentsMargins(10, 8, 10, 10)
+              form.setVerticalSpacing(5)
+              self.spins = {}
+              rows = [("Center Frequency", "freq_mhz", 2400, 2483, 1, " MHz", 0),
+                      ("TX Attenuation", "tx_atten", 0, 89, 1, " dB", 0),
+                      ("RX Gain", "rx_gain", 0, 70, 1, " dB", 0),
+                      ("Min Signal", "min_signal", 10, 50, 1, " dB", 0),
+                      ("Max Speed", "max_kmh", 10, 740, 10, " km/h", 0),
+                      ("Speed Limit", "limit_kmh", 5, 300, 5, " km/h", 0)]
+              for i, (label, var, lo, hi, step, suffix, dec) in enumerate(rows):
+                  sb = QtWidgets.QDoubleSpinBox()
+                  sb.setRange(lo, hi)
+                  sb.setSingleStep(step)
+                  sb.setDecimals(dec)
+                  sb.setSuffix(suffix)
+                  sb.setValue(float(getattr(tb, var, lo)))
+                  sb.setKeyboardTracking(False)
+                  sb.valueChanged.connect(lambda v, var=var: self._set(var, v))
+                  sb.setMinimumWidth(120)
+                  form.addWidget(QtWidgets.QLabel(label + ":"), i, 0)
+                  form.addWidget(sb, i, 1)
+                  self.spins[var] = sb
+              btns = QtWidgets.QHBoxLayout()
+              self.b_start = QtWidgets.QPushButton("▶  Start", objectName="start")
+              self.b_stop = QtWidgets.QPushButton("■  Stop", objectName="stop")
+              self.b_start.clicked.connect(self.start_radar)
+              self.b_stop.clicked.connect(self.stop_radar)
+              btns.addWidget(self.b_start)
+              btns.addWidget(self.b_stop)
+              form.addLayout(btns, len(rows), 0, 1, 2)
+              left.addWidget(panel("Radar Controls", form))
+
+              opts = QtWidgets.QGridLayout()
+              opts.setContentsMargins(10, 8, 10, 10)
+              opts.setVerticalSpacing(4)
+              self.c_rings = QtWidgets.QCheckBox("Show Range Rings", checked=True)
+              self.c_cross = QtWidgets.QCheckBox("Show Crosshair", checked=True)
+              self.c_vel = QtWidgets.QCheckBox("Show Velocity Map", checked=True)
+              self.c_rings.toggled.connect(lambda v: setattr(self, "show_rings", v))
+              self.c_cross.toggled.connect(lambda v: setattr(self, "show_cross", v))
+              for i, c in enumerate((self.c_rings, self.c_cross, self.c_vel)):
+                  opts.addWidget(c, i, 0, 1, 2)
+              self.cb_cmap = QtWidgets.QComboBox()
+              self.cb_cmap.addItems(list(CMAPS))
+              self.cb_cmap.currentTextChanged.connect(lambda t: setattr(self, "cmap_name", t))
+              self.sb_range = QtWidgets.QDoubleSpinBox()
+              self.sb_range.setRange(2, 60)
+              self.sb_range.setDecimals(0)
+              self.sb_range.setSuffix(" m")
+              self.sb_range.setValue(self.max_range)
+              self.sb_range.valueChanged.connect(lambda v: self._set("range_m", v))
+              self.sb_offset = QtWidgets.QDoubleSpinBox()
+              self.sb_offset.setRange(-10, 10)
+              self.sb_offset.setDecimals(1)
+              self.sb_offset.setSingleStep(0.1)
+              self.sb_offset.setSuffix(" m")
+              self.sb_offset.setValue(float(getattr(tb, "range_offset", 0.0)))
+              self.sb_offset.setKeyboardTracking(False)
+              self.sb_offset.valueChanged.connect(lambda v: self._set("range_offset", v))
+              opts.addWidget(QtWidgets.QLabel("Color Map:"), 3, 0)
+              opts.addWidget(self.cb_cmap, 3, 1)
+              opts.addWidget(QtWidgets.QLabel("Max Range:"), 4, 0)
+              opts.addWidget(self.sb_range, 4, 1)
+              opts.addWidget(QtWidgets.QLabel("Range Offset:"), 5, 0)
+              opts.addWidget(self.sb_offset, 5, 1)
+              left.addWidget(panel("Display Options", opts))
+
+              self.info = QtWidgets.QLabel()
+              self.info.setTextFormat(QtCore.Qt.RichText)
+              self.info.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
+              self.info.setWordWrap(True)
+              self.info.setContentsMargins(10, 8, 10, 8)
+              left.addWidget(panel("Targets Info", self.info), 1)
+              lw = QtWidgets.QWidget()
+              lw.setLayout(left)
+              lw.setFixedWidth(330)
+              main.addWidget(lw)
+
+              # ---- centre and right ----
+              self.ppi = PPI(self)
+              main.addWidget(panel("Doppler Radar – PPI Display", self.ppi), 5)
+              right = QtWidgets.QVBoxLayout()
+              right.setContentsMargins(0, 0, 0, 0)
+              right.setSpacing(8)
+              self.vmap = VelocityMap(self)
+              self.vpanel = panel("Doppler Velocity Map", self.vmap)
+              self.profile = DopplerProfile(self)
+              right.addWidget(self.vpanel, 1)
+              right.addWidget(panel("Doppler Profile (power vs speed)", self.profile), 1)
+              self.c_vel.toggled.connect(self.vpanel.setVisible)
+              rw = QtWidgets.QWidget()
+              rw.setLayout(right)
+              main.addWidget(rw, 4)
+
+              # ---- status bar ----
+              bar = QtWidgets.QFrame(objectName="status")
+              bl = QtWidgets.QHBoxLayout(bar)
+              bl.setContentsMargins(12, 6, 12, 6)
+              self.st_pluto = QtWidgets.QLabel()
+              self.st_rate = QtWidgets.QLabel()
+              self.st_proc = QtWidgets.QLabel()
+              self.st_clock = QtWidgets.QLabel()
+              for i, wdg in enumerate((self.st_pluto, self.st_rate, self.st_proc)):
+                  wdg.setStyleSheet("font-size: 11pt;")
+                  bl.addWidget(wdg)
+                  sep = QtWidgets.QLabel("|")
+                  sep.setStyleSheet(f"color: {COL['dim']}; font-size: 11pt; padding: 0 10px;")
+                  bl.addWidget(sep)
+              bl.addStretch(1)
+              self.st_clock.setStyleSheet("font-size: 11pt;")
+              bl.addWidget(self.st_clock)
+              root.addWidget(bar)
+
+              self.timer = QtCore.QTimer(self, timeout=self.refresh)
+              self.timer.start(100)
+
+          # ---- controls -------------------------------------------------------------------------------
+          def _set(self, var, value):
+              """Call the flowgraph's own setter, e.g. tb.set_tx_atten(20)."""
+              if var == "range_m":
+                  self.max_range = float(value)
+                  self.echo = EchoMap()                    # old echoes were drawn for the old scale
+              setter = getattr(self.tb, f"set_{var}", None)
+              if setter:
+                  try:
+                      setter(float(value))
+                  except Exception as e:
+                      print(f"Radar screen: could not set {var} ({e})")
+
+          def stop_radar(self):
+              if not self.running:
+                  return
+              self.tb.stop()                               # the camera block mutes the transmitter
+              self.tb.wait()
+              self.running = False
+
+          def start_radar(self):
+              if self.running:
+                  return
+              self.tb.start()
+              self.running = True
+              try:
+                  self.tb.set_tx_atten(self.tb.tx_atten)   # undo the mute applied on stop
+              except Exception as e:
+                  print(f"Radar screen: could not restore TX attenuation ({e})")
+
+          # ---- update -----------------------------------------------------------------------------------
+          def refresh(self):
+              try:
+                  s = self.reader.read(self.running)
+              except Exception as e:                          # never let the display stop the radar
+                  print(f"Radar screen: {e}")
+                  return
+              self.state = s
+              self.echo.update(s, est_range(s, self.max_range) / self.max_range
+                               if s.target and s.range_m is not None else None)
+              self.b_start.setEnabled(not self.running)
+              self.b_stop.setEnabled(self.running)
+              self._info(s)
+              self._status(s)
+              self.ppi.update()
+              if self.vpanel.isVisible():
+                  self.vmap.update()
+              self.profile.update()
+
+          def _info(self, s):
+              g, r, d, a = COL["green"], COL["red"], COL["dim"], COL["amber"]
+              if s.target:
+                  col = r if s.over else g
+                  way = "approaching" if s.kmh > 0 else "receding"
+                  flag = f" &nbsp;<b style='color:{r}'>OVERSPEED</b>" if s.over else ""
+                  t1 = (f"<b>Target 1</b> &nbsp;<span style='color:{col}; font-size:17pt; font-weight:700'>"
+                        f"{abs(s.kmh):.1f} km/h</span>{flag}<br>"
+                        f"Velocity: {s.kmh / 3.6:+.1f} m/s ({way})<br>"
+                        f"Doppler: {s.fd:+.0f} Hz &nbsp; Signal: {s.snr:.0f} dB<br>"
+                        + (f"Range: <b style='color:{COL['cyan']}; font-size:13pt'>{s.range_m:.1f} m</b>"
+                           f" <span style='color:{d}'>(measured)</span>" if s.range_m is not None
+                           else f"Range: <span style='color:{d}'>measuring ...</span>"))
+              else:
+                  why = {"learning": "learning the background", "no data": "no samples from the Pluto",
+                         "stopped": "radar stopped", "starting": "starting"}.get(s.phase, "waiting for movement")
+                  t1 = f"<b>No target</b><br><span style='color:{d}'>{why}</span>"
+              if s.last_kmh is None:
+                  last = f"<span style='color:{d}'>Last pass: none yet</span>"
+              else:
+                  cap = f"<b style='color:{r}'>CAPTURED</b>" if s.last_captured else f"<span style='color:{g}'>under limit</span>"
+                  last = (f"Last pass: <b>{abs(s.last_kmh):.1f} km/h</b> at {s.last_time} &nbsp;{cap}<br>"
+                          f"<span style='color:{d}'>Session: captured {s.n_captured}, top {s.top_kmh:.1f} km/h</span>")
+              warn = (f"<br><b style='color:{r}'>CLIPPING: raise TX attenuation or lower RX gain</b>"
+                      if s.clipping and self.running else "")
+              rng = (f"<span style='color:{COL['cyan']}; font-weight:700'>Radar range: {self.max_range:g} m</span>"
+                     f"<br>")
+              self.info.setText(f"<div style='font-size:10pt'>{rng}{t1}<br><br>{last}"
+                                f"<br><span style='color:{d}'>Speed limit: {s.limit:g} km/h</span>{warn}</div>")
+
+          def _status(self, s):
+              ok = s.phase in ("running", "learning")
+              col = COL["green"] if ok else (COL["amber"] if s.phase in ("stopped", "starting") else COL["red"])
+              text = {"running": "Connected", "learning": "Connected", "stopped": "Stopped (TX off)",
+                      "no data": "No data", "starting": "Starting"}[s.phase]
+              self.st_pluto.setText(f"<span style='color:{col}; font-size:14pt'>●</span> "
+                                    f"<span style='color:{col}'>PlutoSDR: {text}</span>")
+              rate = float(getattr(self.tb, "samp_rate", 1e6)) / 1e6
+              self.st_rate.setText(f"Sample Rate: {rate:.1f} MSps  →  Doppler 8 kS/s   |   {s.freq_mhz:.0f} MHz, "
+                                   f"2 tones {s.delta_f / 1e6:g} MHz apart")
+              if s.phase == "running":
+                  proc = f"<span style='color:{COL['green']}'>Real-time</span>"
+              elif s.phase == "learning":
+                  proc = f"<span style='color:{COL['amber']}'>Learning background</span>"
+              else:
+                  proc = f"<span style='color:{COL['dim']}'>Idle</span>"
+              self.st_proc.setText("Processing: " + proc)
+              self.st_clock.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
+      def _check_png():
+          """White tick for the check boxes (Qt style sheets need an image file)."""
+          import os
+          import tempfile
+          path = os.path.join(tempfile.gettempdir(), "radar_screen_check.png")
+          pm = QtGui.QPixmap(16, 16)
+          pm.fill(QtCore.Qt.transparent)
+          p = QtGui.QPainter(pm)
+          p.setRenderHint(QtGui.QPainter.Antialiasing)
+          p.setPen(QtGui.QPen(QtGui.QColor("white"), 2.4, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+          p.drawPolyline(QtGui.QPolygonF([QtCore.QPointF(3.5, 8.5), QtCore.QPointF(6.8, 11.8), QtCore.QPointF(12.5, 4.5)]))
+          p.end()
+          pm.save(path)
+          return path.replace("\\", "/")
+
+
+      def attach(tb):
+          """Called by the Python Snippet block (Main - After Init): puts the radar console in the flowgraph window."""
+          screen = RadarScreen(tb)
+          tb.radar_screen = screen
+          for name, w in list(vars(tb).items()):          # the console replaces the plain GNU Radio sliders
+              if name.startswith("_") and name.endswith("_win") and isinstance(w, QtWidgets.QWidget):
+                  w.hide()
+          tb.top_grid_layout.addWidget(screen, 4, 0, 1, 2)
+          for r in range(4):
+              tb.top_grid_layout.setRowStretch(r, 0)
+          tb.top_grid_layout.setRowStretch(4, 1)
+          tb.setStyleSheet(WINDOW_QSS.replace("CHECK_PNG", _check_png()))
+          tb.setWindowTitle("Doppler Radar – GNU Radio + PlutoSDR")
+          tb.resize(1600, 950)
+          tb.setWindowState(tb.windowState() | QtCore.Qt.WindowMaximized)
+          return screen
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 1160
+    - 340
+    rotation: 0
+    state: enabled
+connections:
+- - analog_sig_source_x_0
+  - '0'
+  - blocks_add_xx_0
+  - '0'
+- - analog_sig_source_x_1
+  - '0'
+  - blocks_add_xx_0
+  - '1'
+- - blocks_add_xx_0
+  - '0'
+  - iio_pluto_sink_0
+  - '0'
+- - iio_pluto_source_0
+  - '0'
+  - freq_xlating_fir_filter_xxx_0
+  - '0'
+- - iio_pluto_source_0
+  - '0'
+  - freq_xlating_fir_filter_xxx_1
+  - '0'
+- - freq_xlating_fir_filter_xxx_0
+  - '0'
+  - fir_filter_xxx_0
+  - '0'
+- - freq_xlating_fir_filter_xxx_1
+  - '0'
+  - fir_filter_xxx_1
+  - '0'
+- - fir_filter_xxx_0
+  - '0'
+  - epy_block_0
+  - '0'
+- - fir_filter_xxx_1
+  - '0'
+  - epy_block_0
+  - '1'
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

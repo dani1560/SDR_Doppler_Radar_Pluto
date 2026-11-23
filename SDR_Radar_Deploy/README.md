@@ -19,6 +19,8 @@ laptop screen and on the Arduino LED display until the next pass. A pass faster 
 |---|---|
 | **`START_GNURADIO.bat`** | Runs the GNU Radio radar (needs radioconda, see `DEPLOY.md`) |
 | `EDIT_GNURADIO.bat` | Opens `gnuradio/doppler_radar.grc` in GNU Radio Companion (block diagram) |
+| **`START_RADAR_SCREEN.bat`** | Same GNU Radio radar with the radar screen: radar circle, speed cards, spectrum, waterfall |
+| `EDIT_RADAR_SCREEN.bat` | Opens `gnuradio/doppler_radar_screen.grc` in GNU Radio Companion |
 | `START_RADAR.bat` | Runs the Python version (backup, no GNU Radio needed) |
 | `TOOLS.bat` | Optional: tests, Arduino upload, driver install, speed log |
 
@@ -63,6 +65,57 @@ detector as the Python version: clutter map, mirror test, sub-bin peak, pass tra
 versions therefore give identical speeds. The spectrum display is in Hz: km/h = Hz x c / (2 fc) x 3.6
 (at 2482 MHz, 1 Hz = 0.2176 km/h).
 
+### Radar screen (`START_RADAR_SCREEN.bat`)
+
+`gnuradio/doppler_radar_screen.grc` is a **dual-frequency CW radar**: it measures speed **and range**.
+
+```
+Signal Source (tone A, -1.3 MHz) --+
+Signal Source (tone B, +1.7 MHz) --+--> Add --> PlutoSDR Sink (TX, cyclic buffer, 4 MS/s)
+PlutoSDR Source (RX, 4 MS/s) --> Frequency Xlating FIR (tone A, /50) --> FIR Filter (/10, 8 kS/s) --> in 0
+                             --> Frequency Xlating FIR (tone B, /50) --> FIR Filter (/10, 8 kS/s) --> in 1
+    Doppler Speed + Range Camera (embedded Python block): speed, range, capture, speed_log.csv, Arduino
+```
+
+- **Speed:** input 0 goes through the same detector as the normal version (`doppler_core.py`).
+- **Range:** a moving target appears at the same Doppler bin in both inputs; its echo is delayed by 2R/c, so the
+  phase difference between the two tones at that bin is -4 pi delta_f R / c. The TX->RX leakage (0 Hz, range ~0)
+  is the phase reference, which cancels the unknown start offset of the Pluto's TX and RX streams:
+  R = c / (4 pi delta_f) x phase difference. With delta_f = 3 MHz the range is unambiguous up to
+  c / (2 delta_f) = 50 m; 1 rad of phase = 8 m, so the reading is good to about +-0.5 m (median of 7 readings).
+  A simulated person walking from 12 m read 11.5 / 10.4 / 9.7 / 8.3 / 7.4 m against 11.1 / 10.3 / 9.5 / 7.9 / 7.1 m.
+- Only moving targets have a range (stationary objects have no Doppler and are ignored, like before).
+- **Calibration (once):** walk towards the radar and stop-and-go at a measured distance (e.g. 3.6 m), read the
+  range, and set **Range Offset** = true distance - shown distance. Cables and the TX-RX antenna spacing cause a
+  small fixed offset.
+- The TX buffer (32760 samples) holds whole periods of both tones and repeats inside the Pluto (cyclic), so only
+  the receive data (4 MS/s) goes over USB.
+
+The radar console is two more GNU Radio blocks: a **Python Module** block `radar_screen` that holds the console,
+and a **Python Snippet** block (Main - After Init) that puts it in the window (maximised). `START_RADAR_SCREEN.bat`
+also opens the flowgraph in GNU Radio Companion, so the block diagram and the radar come up together (do not press
+Run there as well: only one radar can use the Pluto). Defaults for range: **Max Range 12 m, TX attenuation 10 dB**
+(raise TX attenuation if CLIPPING appears). The console replaces the plain sliders and reads the camera block ten
+times a second:
+
+- **Radar Controls:** Center Frequency, TX Attenuation, RX Gain, Min Signal, Max Speed, Speed Limit. They call
+  the flowgraph's own setters (`set_tx_atten`, ...), exactly like the sliders. **Start / Stop** starts and stops
+  the flowgraph; Stop mutes the transmitter.
+- **Display Options:** range rings, crosshair, velocity map on/off, colour map (Jet, Viridis, Grey), Max Range
+  (display scale), Range Offset (calibration).
+- **Targets Info:** speed (km/h and m/s), direction, Doppler frequency, signal, OVERSPEED, **measured range**,
+  last pass and capture (from `speed_log.csv`), CLIPPING warning.
+- **PPI Display:** echo strength (dB colour scale) of detected targets at their measured range on the fixed
+  antenna beam (dashed), fading over ~4 s, so a walking target leaves a track.
+- **Doppler Velocity Map:** the antenna beam coloured by radial speed (m/s, + = approaching).
+- **Doppler Profile:** the live Doppler spectrum, power (dB above the noise) against speed (m/s), with the
+  detection threshold.
+- **Status bar:** PlutoSDR connected / no data / stopped, sample rate, processing state, clock.
+
+Speed, direction and range are measured; the **bearing** inside the antenna beam is not (one fixed antenna pair),
+so a target is drawn across the beam at its measured range. Speeds, direction, capture and logging are exactly
+those of the normal GNU Radio version.
+
 ## Python version
 
 `START_RADAR.bat` checks Python, installs the Python packages, installs the Pluto drivers if libiio is
@@ -95,6 +148,8 @@ when an Arduino is found.
 | `EDIT_GNURADIO.bat` | Opens the flowgraph in GNU Radio Companion |
 | `gnuradio/doppler_radar.grc` | GNU Radio flowgraph (Pluto TX/RX, filters, displays, sliders) |
 | `gnuradio/doppler_camera_block.py` | Source of the flowgraph's "Doppler Speed Camera" block |
+| `START_RADAR_SCREEN.bat` / `EDIT_RADAR_SCREEN.bat` | Run / open the radar-screen flowgraph |
+| `gnuradio/doppler_radar_screen.grc` | Same flowgraph with the radar screen (Python Module + Python Snippet blocks) |
 | `doppler_core.py` | Detection, speed, pass tracking and logging shared by both versions |
 | `START_RADAR.bat` | One-click setup and Python radar start |
 | `TOOLS.bat` | Menu: tests, walking mode, Arduino upload, drivers, speed log |
