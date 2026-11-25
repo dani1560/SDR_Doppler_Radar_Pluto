@@ -72,22 +72,36 @@ versions therefore give identical speeds. The spectrum display is in Hz: km/h = 
 ```
 Signal Source (tone A, -1.3 MHz) --+
 Signal Source (tone B, +1.7 MHz) --+--> Add --> PlutoSDR Sink (TX, cyclic buffer, 4 MS/s)
-PlutoSDR Source (RX, 4 MS/s) --> Frequency Xlating FIR (tone A, /50) --> FIR Filter (/10, 8 kS/s) --> in 0
-                             --> Frequency Xlating FIR (tone B, /50) --> FIR Filter (/10, 8 kS/s) --> in 1
+PlutoSDR Source (RX, 4 MS/s) --> Multiply (x Vector Source: tone A table) --> FIR (/50) --> FIR (/10, 8 kS/s) --> in 0
+                             --> Multiply (x Vector Source: tone B table) --> FIR (/50) --> FIR (/10, 8 kS/s) --> in 1
     Doppler Speed + Range Camera (embedded Python block): speed, range, capture, speed_log.csv, Arduino
 ```
 
+- **Exact mixer:** at 4 MS/s both tones repeat every 40 samples (1.3/4 = 13/40, 1.7/4 = 17/40), so each tone is
+  moved to 0 Hz by a repeating 40-sample table (`lo_a`, `lo_b`). A Frequency Xlating FIR was used first, but its
+  float oscillator drifted by about 0.23 rad/s, which moved the measured range by about 1.8 m every second.
 - **Speed:** input 0 goes through the same detector as the normal version (`doppler_core.py`).
 - **Range:** a moving target appears at the same Doppler bin in both inputs; its echo is delayed by 2R/c, so the
-  phase difference between the two tones at that bin is -4 pi delta_f R / c. The TX->RX leakage (0 Hz, range ~0)
-  is the phase reference, which cancels the unknown start offset of the Pluto's TX and RX streams:
-  R = c / (4 pi delta_f) x phase difference. With delta_f = 3 MHz the range is unambiguous up to
-  c / (2 delta_f) = 50 m; 1 rad of phase = 8 m, so the reading is good to about +-0.5 m (median of 7 readings).
-  A simulated person walking from 12 m read 11.5 / 10.4 / 9.7 / 8.3 / 7.4 m against 11.1 / 10.3 / 9.5 / 7.9 / 7.1 m.
+  phase difference between the two tones at that bin is -4 pi delta_f R / c. The 0 Hz part of each input (TX->RX
+  leakage + walls) is the phase reference, which cancels the unknown start offset of the Pluto's TX and RX
+  streams: R = c / (4 pi delta_f) x phase difference. With delta_f = 3 MHz the range is unambiguous up to
+  c / (2 delta_f) = 50 m; 1 rad of phase = 8 m.
+- **Making it steady:** the reference is averaged over ~6 s and frozen while a target is present (a person near
+  the radar does not move it); a reading is used only if its phase agrees over the peak bins (rejects wall
+  multipath); the shown range is the median of 15 readings (~1 s), outliers more than 1.5 m away are dropped, and
+  the median is moved forward to "now" with the measured speed (removes the ~0.6 s lag).
+  Simulated person walking in from 12 m: 11.54 / 11.05 / 10.42 / 9.37 / 8.59 / 7.54 / 7.30 m against
+  11.51 / 10.77 / 10.01 / 9.28 / 8.53 / 7.79 / 7.18 m (within 0.4 m).
 - Only moving targets have a range (stationary objects have no Doppler and are ignored, like before).
-- **Calibration (once):** walk towards the radar and stop-and-go at a measured distance (e.g. 3.6 m), read the
-  range, and set **Range Offset** = true distance - shown distance. Cables and the TX-RX antenna spacing cause a
-  small fixed offset.
+- **Calibration (once per set-up):** the 0 Hz reference also contains the echoes of walls and furniture, so the
+  reading has a fixed offset for each set-up (on the real Pluto, without calibration a person near the radar read
+  46-48 m, i.e. -2 to -4 m). Mark a measured distance on the floor (e.g. 3.6 m), set **Calibrate at** to it and
+  press the button: you have 5 s to get there, then walk back and forth around the mark at normal pace for 10 s.
+  The console sets **Range Offset** = known distance - median reading and saves it in
+  `gnuradio/range_calibration.txt`, which is loaded at every start. Calibrate again after moving the antennas or
+  the radar. (Simulated test: wall at 4.5 m, person swaying at 3.6 m: offset +7.4 m, then 3.9 / 4.2 m shown.)
+  Indoors in a small room (3.6 m) the readings scatter more because of wall multipath; test outdoors for the
+  real accuracy.
 - The TX buffer (32760 samples) holds whole periods of both tones and repeats inside the Pluto (cyclic), so only
   the receive data (4 MS/s) goes over USB.
 
@@ -102,7 +116,7 @@ times a second:
   the flowgraph's own setters (`set_tx_atten`, ...), exactly like the sliders. **Start / Stop** starts and stops
   the flowgraph; Stop mutes the transmitter.
 - **Display Options:** range rings, crosshair, velocity map on/off, colour map (Jet, Viridis, Grey), Max Range
-  (display scale), Range Offset (calibration).
+  (display scale), Range Offset, and the **Calibrate at** button with the known distance.
 - **Targets Info:** speed (km/h and m/s), direction, Doppler frequency, signal, OVERSPEED, **measured range**,
   last pass and capture (from `speed_log.csv`), CLIPPING warning.
 - **PPI Display:** echo strength (dB colour scale) of detected targets at their measured range on the fixed
@@ -110,6 +124,8 @@ times a second:
 - **Doppler Velocity Map:** the antenna beam coloured by radial speed (m/s, + = approaching).
 - **Doppler Profile:** the live Doppler spectrum, power (dB above the noise) against speed (m/s), with the
   detection threshold.
+- **Waterfall (last 12 s):** the same spectrum over time, newest row on top; a moving target leaves a coloured
+  trace at its speed.
 - **Status bar:** PlutoSDR connected / no data / stopped, sample rate, processing state, clock.
 
 Speed, direction and range are measured; the **bearing** inside the antenna beam is not (one fixed antenna pair),

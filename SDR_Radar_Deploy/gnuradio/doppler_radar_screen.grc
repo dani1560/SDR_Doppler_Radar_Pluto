@@ -180,7 +180,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '70'
-    value: '30'
+    value: '50'
     widget: counter_slider
   states:
     bus_sink: false
@@ -231,7 +231,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '89'
-    value: '10'
+    value: '0'
     widget: counter_slider
   states:
     bus_sink: false
@@ -282,7 +282,9 @@ blocks:
       2R/c, so the phase difference between the two inputs at that bin is -4 pi delta_f R / c. The TX->RX leakage
       (the 0 Hz part of each input, range ~0) gives the reference phase, which cancels the unknown start offset
       between the Pluto's transmit and receive streams:
-          R = -c / (4 pi delta_f) * wrap(phase_target - phase_leakage) (mod c / (2 delta_f)) + range offset
+          R = (-c / (4 pi delta_f) * wrap(phase_target - phase_leakage) + range offset)  mod  c / (2 delta_f)
+      The 0 Hz reference also contains the echoes of walls and furniture, so the reading has a fixed offset for each
+      set-up; the radar console's Calibrate button measures it once (range offset).
       """
       import os
       import sys
@@ -308,7 +310,11 @@ blocks:
 
       CLIP_LEVEL = 0.9    # leakage tone above 90 % of ADC full scale = receiver overload
       C = 299792458.0
-      RANGE_AVG = 7       # median of this many range readings (about 0.45 s)
+      RANGE_AVG = 15      # median of this many range readings (about 1 s)
+      REF_ALPHA = 0.01    # 0 Hz reference: average over about 6 s, updated only while no target is present
+      COHERENCE_MIN = 0.7  # the target's phase difference must agree over the peak bins (rejects multipath mixes)
+      OUTLIER_M = 1.5     # a reading this far from the current median is an outlier ...
+      OUTLIER_RESET = 6   # ... unless this many come in a row (the target really moved)
 
 
       class blk(gr.sync_block):
@@ -333,6 +339,10 @@ blocks:
               self.hist_b = np.zeros(self.dc.NFFT, complex)
               self.kmh = self.snr = 0.0                       # latest frame, for the display
               self.range_m = None                             # measured range of the current target (m)
+              self.range_raw = None                           # last single reading without the offset (m)
+              self.ref_a = self.ref_b = None                  # averaged 0 Hz reference of each tone
+              self.n_ref = 0
+              self.outliers = 0
               self.ranges = deque(maxlen=RANGE_AVG)
               self.level = 0.0                                # TX->RX leakage level (1.0 = ADC full scale)
               self.arduino = None
@@ -427,14 +437,15 @@ blocks:
                   kmh, proximity, ended = self.cam.update(self.det, p_db, k, snr, confirmed)
                   self.kmh, self.snr = kmh, snr
                   self.level = float(np.abs(fa).mean())
+                  self._update_reference(proximity > 0)
                   if proximity > 0:
                       r = self._range(k)
                       if r is not None:
-                          self.ranges.append(r)
-                      self.range_m = float(np.median(self.ranges)) if self.ranges else None
+                          self._add_reading(r)
+                      self.range_m = self._now(kmh) if self.ranges else None
                   else:
                       self.ranges.clear()
-                      self.range_m = None
+                      self.range_m = self.range_raw = None
                   if self.arduino:
                       try:
                           self.arduino.write(self.cam.arduino_line(kmh, proximity, float(self.alarm_kmh)).encode())
@@ -442,22 +453,62 @@ blocks:
                           self.arduino = None
               return n
 
+          def _update_reference(self, target_present):
+              """Average the 0 Hz part (TX->RX leakage + walls) of both tones; frozen while a target is present, so a
+              person near the radar does not move the reference."""
+              la, lb = self.det.history.mean(), self.hist_b.mean()
+              if self.ref_a is None:
+                  self.ref_a, self.ref_b = la, lb
+                  return
+              if target_present and self.n_ref > 30:
+                  return
+              self.n_ref += 1
+              a = max(REF_ALPHA, 1.0 / self.n_ref)
+              self.ref_a += a * (la - self.ref_a)
+              self.ref_b += a * (lb - self.ref_b)
+
+          def _now(self, kmh):
+              """Median of the recent readings, moved forward to now with the measured speed: the median is about
+              (n-1)/2 frames old plus half the FFT window (+ = approaching, so the range shrinks)."""
+              dc = self.dc
+              lag = (len(self.ranges) - 1) / 2 * dc.FRAME / dc.FS_DOPPLER + dc.NFFT / 2 / dc.FS_DOPPLER
+              R = self.max_unambiguous_m
+              return float((np.median(self.ranges) - kmh / 3.6 * lag) % R)
+
+          def _add_reading(self, r):
+              """Median filter with outlier rejection (wrap-aware)."""
+              if len(self.ranges) >= 5:
+                  R = self.max_unambiguous_m
+                  med = float(np.median(self.ranges))
+                  dev = (r - med + R / 2) % R - R / 2
+                  if abs(dev) > OUTLIER_M:
+                      self.outliers += 1
+                      if self.outliers < OUTLIER_RESET:
+                          return
+                      self.ranges.clear()
+              self.outliers = 0
+              self.ranges.append(r)
+
           def _range(self, k):
               """Range (m) of the echo at Doppler bin k from the phase difference between the two tones."""
               ha, hb = self.det.history, self.hist_b
-              la, lb = ha.mean(), hb.mean()                   # TX->RX leakage of each tone: the reference
-              if abs(la) == 0 or abs(lb) == 0:
+              la, lb = ha.mean(), hb.mean()
+              if self.ref_a is None or abs(self.ref_a) == 0 or abs(self.ref_b) == 0:
                   return None
               w = self.det.window
               A = np.fft.fftshift(np.fft.fft((ha - la) * w))
               B = np.fft.fftshift(np.fft.fft((hb - lb) * w))
               sl = slice(max(k - 1, 0), k + 2)
-              target = np.angle(np.sum(B[sl] * np.conj(A[sl])))
-              ref = np.angle(lb * np.conj(la))
+              z = B[sl] * np.conj(A[sl])
+              if np.abs(np.sum(z)) < COHERENCE_MIN * np.sum(np.abs(z)):
+                  return None                                 # phase not consistent over the peak: reject
+              target = np.angle(np.sum(z))
+              ref = np.angle(self.ref_b * np.conj(self.ref_a))   # averaged reference (see _update_reference)
               d = np.angle(np.exp(1j * (target - ref)))     # wrap to -pi..pi
               sign = 1.0 if float(self.tone_b_hz) > float(self.tone_a_hz) else -1.0
-              r = (-sign * d * C / (4 * np.pi * self.delta_f)) % self.max_unambiguous_m
-              return float(r + float(self.range_offset_m))
+              r_raw = float(-sign * d * C / (4 * np.pi * self.delta_f))      # -R/2 .. +R/2, no offset
+              self.range_raw = r_raw
+              return float((r_raw + float(self.range_offset_m)) % self.max_unambiguous_m)
 
           # --- display text (kept for the console and for debugging) ---------------------------------------
           def live_text(self):
@@ -491,7 +542,7 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate:
-    - 880
+    - 1000
     - 480
     rotation: 0
     state: enabled
@@ -512,29 +563,7 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate:
-    - 640
-    - 460
-    rotation: 0
-    state: enabled
-- name: freq_xlating_fir_filter_xxx_0
-  id: freq_xlating_fir_filter_xxx
-  parameters:
-    affinity: ''
-    alias: ''
-    center_freq: tone_hz
-    comment: ''
-    decim: '50'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samp_rate: samp_rate
-    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
-    type: ccc
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate:
-    - 384
+    - 800
     - 460
     rotation: 0
     state: enabled
@@ -645,9 +674,9 @@ blocks:
     min_len: '200'
     orient: QtCore.Qt.Horizontal
     rangeType: float
-    start: '-10'
+    start: '-25'
     step: '0.1'
-    stop: '10'
+    stop: '25'
     value: '0'
     widget: counter_slider
   states:
@@ -704,26 +733,47 @@ blocks:
     - 320
     rotation: 0
     state: enabled
-- name: freq_xlating_fir_filter_xxx_1
-  id: freq_xlating_fir_filter_xxx
+- name: import_0
+  id: import
   parameters:
-    affinity: ''
     alias: ''
-    center_freq: tone_b
     comment: ''
-    decim: '50'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samp_rate: samp_rate
-    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
-    type: ccc
+    imports: import numpy as np
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
     coordinate:
-    - 384
-    - 580
+    - 600
+    - 12
+    rotation: 0
+    state: enabled
+- name: lo_a
+  id: variable
+  parameters:
+    comment: exact local oscillator for tone A (one period)
+    value: np.exp(-2j*np.pi*tone_hz*np.arange(int(samp_rate//np.gcd(int(abs(tone_hz)), int(samp_rate))))/samp_rate).astype(np.complex64).tolist()
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 440
+    - 76
+    rotation: 0
+    state: enabled
+- name: lo_b
+  id: variable
+  parameters:
+    comment: exact local oscillator for tone B (one period)
+    value: np.exp(-2j*np.pi*tone_b*np.arange(int(samp_rate//np.gcd(int(abs(tone_b)), int(samp_rate))))/samp_rate).astype(np.complex64).tolist()
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 600
+    - 76
     rotation: 0
     state: enabled
 - name: fir_filter_xxx_1
@@ -743,7 +793,133 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate:
+    - 800
+    - 580
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_0
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: complex
+    vector: lo_a
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 260
+    - 520
+    rotation: 0
+    state: enabled
+- name: blocks_multiply_xx_0
+  id: blocks_multiply_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '2'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 440
+    - 460
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_lp0
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    decim: '50'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 600
+    - 460
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_1
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: complex
+    vector: lo_b
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 260
     - 640
+    rotation: 0
+    state: enabled
+- name: blocks_multiply_xx_1
+  id: blocks_multiply_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '2'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 440
+    - 580
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_lp1
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    decim: '50'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: firdes.low_pass_2(1.0, samp_rate, 10000, 20000, 80)
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate:
+    - 600
     - 580
     rotation: 0
     state: enabled
@@ -778,7 +954,7 @@ blocks:
         - left:   Radar Controls (frequency, TX attenuation, RX gain, min signal, max speed, speed limit, Start / Stop),
                   Display Options (range rings, crosshair, velocity map, colour map, max range) and Targets Info
         - centre: PPI display - echo strength of detected targets on the fixed antenna beam, with persistence
-        - right:  Doppler velocity map of the antenna beam and the Doppler profile (power against speed)
+        - right:  Doppler velocity map of the antenna beam, Doppler profile (power against speed) and waterfall
         - bottom: status bar (PlutoSDR, sample rate, processing, clock)
       The controls call the flowgraph's own variable setters (set_tx_atten, set_rx_gain, ...), so they act on the GNU
       Radio blocks exactly like the sliders. Ten times a second the screen reads the Doppler Speed + Range Camera block
@@ -787,6 +963,8 @@ blocks:
       measured, so a target is drawn across the beam at its measured range.
       """
       import math
+      import os
+      import sys
       import time
       from datetime import datetime
 
@@ -813,7 +991,7 @@ blocks:
       QLabel {{ background: transparent; }}
       QWidget#body {{ background: transparent; }}
       QDoubleSpinBox, QComboBox {{ background: #16264a; border: 1px solid {COL['border']}; border-radius: 4px;
-          padding: 2px 6px; color: {COL['text']}; font-size: 10.5pt; min-height: 20px; }}
+          padding: 1px 6px; color: {COL['text']}; font-size: 10pt; min-height: 18px; }}
       QCheckBox {{ background: transparent; font-size: 10.5pt; spacing: 8px; }}
       QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 3px; border: 1px solid {COL['border']};
           background: #16264a; }}
@@ -1113,7 +1291,7 @@ blocks:
           def __init__(self, screen):
               super().__init__()
               self.screen = screen
-              self.setMinimumSize(380, 250)
+              self.setMinimumSize(380, 200)
               self._key = None
 
           def _mapping(self, W, H, ax, ay, Rf):
@@ -1185,7 +1363,7 @@ blocks:
           def __init__(self, screen):
               super().__init__()
               self.screen = screen
-              self.setMinimumSize(380, 230)
+              self.setMinimumSize(380, 190)
 
           def paintEvent(self, _):
               s = self.screen.state
@@ -1242,6 +1420,65 @@ blocks:
               p.end()
 
 
+      class Waterfall(QtWidgets.QWidget):
+          """Doppler spectrum history: newest row on top, one row per update (0.1 s), x = radial speed (m/s)."""
+
+          ROWS, COLS = 120, 256       # 12 s of history
+
+          def __init__(self, screen):
+              super().__init__()
+              self.screen = screen
+              self.setMinimumSize(380, 170)
+              self.rows = np.zeros((self.ROWS, self.COLS), np.float32)     # dB above the noise floor
+              self.scale = None
+
+          def push(self, s):
+              if s.spec_kmh is None or len(s.spec_kmh) < 3:
+                  return
+              vmax = max(s.max_kmh / 3.6, 1.0)
+              if self.scale != round(vmax, 3):                 # max speed changed: start a new history
+                  self.scale = round(vmax, 3)
+                  self.rows[:] = 0
+              cols = np.linspace(-vmax, vmax, self.COLS)
+              row = np.interp(cols, s.spec_kmh / 3.6, s.spec_db).astype(np.float32)
+              row[np.abs(cols) < s.ignore_kmh / 3.6] = 0       # ignored zone (TX leakage)
+              self.rows = np.roll(self.rows, 1, axis=0)
+              self.rows[0] = row
+
+          def paintEvent(self, _):
+              sc = self.screen
+              p = QtGui.QPainter(self)
+              p.setRenderHint(QtGui.QPainter.Antialiasing)
+              w, h = self.width(), self.height()
+              p.fillRect(self.rect(), QtGui.QColor(0, 0, 0))
+              L, T, Rr, B = 64, 10, w - 96, h - 42
+              cmap = CMAPS[sc.cmap_name]
+              idx = np.clip((self.rows - 4.0) / 36.0 * 255, 0, 255).astype(int)     # noise floor dark
+              img = np.ascontiguousarray(cmap[idx]).astype(np.uint32)
+              qimg = QtGui.QImage(img.data, self.COLS, self.ROWS, self.COLS * 4, QtGui.QImage.Format_RGB32).copy()
+              p.drawImage(QtCore.QRectF(L, T, Rr - L, B - T), qimg)
+              p.setPen(QtGui.QPen(QtGui.QColor(235, 235, 235), 1.2))
+              p.drawRect(QtCore.QRectF(L, T, Rr - L, B - T))
+              vmax = self.scale or max(sc.state.max_kmh / 3.6, 1.0)
+              f = p.font()
+              f.setPointSize(10)
+              p.setFont(f)
+              for v in np.linspace(-vmax, vmax, 5):
+                  x = L + (v + vmax) / (2 * vmax) * (Rr - L)
+                  p.drawText(QtCore.QRectF(x - 30, B + 3, 60, 16), QtCore.Qt.AlignCenter, f"{v:+.0f}")
+              for frac, text in ((0, "now"), (0.5, "-6 s"), (1, "-12 s")):
+                  y = T + frac * (B - T)
+                  p.drawText(QtCore.QRectF(0, y - 9, L - 8, 18), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, text)
+              f.setBold(True)
+              p.setFont(f)
+              p.drawText(QtCore.QRectF(L, B + 20, Rr - L, 18), QtCore.Qt.AlignCenter, "Velocity (m/s)")
+              f.setBold(False)
+              p.setFont(f)
+              draw_colorbar(p, QtCore.QRectF(w - 76, T + 22, 16, B - T - 22), cmap,
+                            [(0, "4"), (0.5, "22"), (1, "40")], "dB")
+              p.end()
+
+
       # ------------------------------------------------------------------------------------------------------
       # Console
       # ------------------------------------------------------------------------------------------------------
@@ -1287,7 +1524,7 @@ blocks:
               left.setSpacing(8)
               form = QtWidgets.QGridLayout()
               form.setContentsMargins(10, 8, 10, 10)
-              form.setVerticalSpacing(5)
+              form.setVerticalSpacing(3)
               self.spins = {}
               rows = [("Center Frequency", "freq_mhz", 2400, 2483, 1, " MHz", 0),
                       ("TX Attenuation", "tx_atten", 0, 89, 1, " dB", 0),
@@ -1320,7 +1557,7 @@ blocks:
 
               opts = QtWidgets.QGridLayout()
               opts.setContentsMargins(10, 8, 10, 10)
-              opts.setVerticalSpacing(4)
+              opts.setVerticalSpacing(2)
               self.c_rings = QtWidgets.QCheckBox("Show Range Rings", checked=True)
               self.c_cross = QtWidgets.QCheckBox("Show Crosshair", checked=True)
               self.c_vel = QtWidgets.QCheckBox("Show Velocity Map", checked=True)
@@ -1338,7 +1575,7 @@ blocks:
               self.sb_range.setValue(self.max_range)
               self.sb_range.valueChanged.connect(lambda v: self._set("range_m", v))
               self.sb_offset = QtWidgets.QDoubleSpinBox()
-              self.sb_offset.setRange(-10, 10)
+              self.sb_offset.setRange(-25, 25)
               self.sb_offset.setDecimals(1)
               self.sb_offset.setSingleStep(0.1)
               self.sb_offset.setSuffix(" m")
@@ -1351,6 +1588,20 @@ blocks:
               opts.addWidget(self.sb_range, 4, 1)
               opts.addWidget(QtWidgets.QLabel("Range Offset:"), 5, 0)
               opts.addWidget(self.sb_offset, 5, 1)
+              self.sb_known = QtWidgets.QDoubleSpinBox()
+              self.sb_known.setRange(0.5, 25)
+              self.sb_known.setDecimals(1)
+              self.sb_known.setSingleStep(0.1)
+              self.sb_known.setSuffix(" m")
+              self.sb_known.setValue(3.6)
+              self.b_cal = QtWidgets.QPushButton("Calibrate at:")
+              self.b_cal.setStyleSheet("background: #2f5fb3; color: white; font-weight: 700; border-radius: 4px; "
+                                       "padding: 4px;")
+              self.b_cal.clicked.connect(self.start_calibration)
+              opts.addWidget(self.b_cal, 6, 0)
+              opts.addWidget(self.sb_known, 6, 1)
+              self.calib = None
+              self.cal_msg = ""
               left.addWidget(panel("Display Options", opts))
 
               self.info = QtWidgets.QLabel()
@@ -1375,6 +1626,8 @@ blocks:
               self.profile = DopplerProfile(self)
               right.addWidget(self.vpanel, 1)
               right.addWidget(panel("Doppler Profile (power vs speed)", self.profile), 1)
+              self.wf = Waterfall(self)
+              right.addWidget(panel("Waterfall (last 12 s)", self.wf), 1)
               self.c_vel.toggled.connect(self.vpanel.setVisible)
               rw = QtWidgets.QWidget()
               rw.setLayout(right)
@@ -1408,6 +1661,8 @@ blocks:
               if var == "range_m":
                   self.max_range = float(value)
                   self.echo = EchoMap()                    # old echoes were drawn for the old scale
+              if var == "range_offset":
+                  save_offset(float(value))
               setter = getattr(self.tb, f"set_{var}", None)
               if setter:
                   try:
@@ -1440,6 +1695,7 @@ blocks:
                   print(f"Radar screen: {e}")
                   return
               self.state = s
+              self._calibration_step(s)
               self.echo.update(s, est_range(s, self.max_range) / self.max_range
                                if s.target and s.range_m is not None else None)
               self.b_start.setEnabled(not self.running)
@@ -1450,6 +1706,41 @@ blocks:
               if self.vpanel.isVisible():
                   self.vmap.update()
               self.profile.update()
+              if s.phase in ("running", "learning"):
+                  self.wf.push(s)
+              self.wf.update()
+
+          def start_calibration(self):
+              """Walk back and forth at a measured distance: 5 s to get there, then 10 s of readings."""
+              now = time.time()
+              self.calib = {"known": float(self.sb_known.value()), "start": now + 5, "end": now + 15, "vals": []}
+              self.cal_msg = ""
+
+          def _calibration_step(self, s):
+              c = self.calib
+              if not c:
+                  return
+              now, blk = time.time(), self.tb.epy_block_0
+              if now < c["start"]:
+                  self.b_cal.setText(f"Go there ... {c['start'] - now:.0f} s")
+                  return
+              if now < c["end"]:
+                  raw = getattr(blk, "range_raw", None)
+                  if s.target and raw is not None:
+                      c["vals"].append(raw)
+                  self.b_cal.setText(f"Walk ... {c['end'] - now:.0f} s ({len(c['vals'])})")
+                  return
+              self.calib = None
+              self.b_cal.setText("Calibrate at:")
+              if len(c["vals"]) < 5:
+                  self.cal_msg = ("Calibration failed: too little movement. Walk back and forth at the mark at "
+                                  "normal pace and press Calibrate again.")
+                  return
+              R = float(getattr(blk, "max_unambiguous_m", 50.0))
+              off = c["known"] - float(np.median(c["vals"]))
+              off = (off + R / 2) % R - R / 2
+              self.sb_offset.setValue(round(off, 1))       # calls tb.set_range_offset and saves it
+              self.cal_msg = f"Calibrated: Range Offset {off:+.1f} m from {len(c['vals'])} readings (saved)."
 
           def _info(self, s):
               g, r, d, a = COL["green"], COL["red"], COL["dim"], COL["amber"]
@@ -1476,10 +1767,13 @@ blocks:
                           f"<span style='color:{d}'>Session: captured {s.n_captured}, top {s.top_kmh:.1f} km/h</span>")
               warn = (f"<br><b style='color:{r}'>CLIPPING: raise TX attenuation or lower RX gain</b>"
                       if s.clipping and self.running else "")
+              if self.calib:
+                  warn += f"<br><b style='color:{a}'>Calibrating: walk back and forth at {self.calib['known']:g} m</b>"
+              elif self.cal_msg:
+                  warn += f"<br><b style='color:{a}'>{self.cal_msg}</b>"
               rng = (f"<span style='color:{COL['cyan']}; font-weight:700'>Radar range: {self.max_range:g} m</span>"
                      f"<br>")
-              self.info.setText(f"<div style='font-size:10pt'>{rng}{t1}<br><br>{last}"
-                                f"<br><span style='color:{d}'>Speed limit: {s.limit:g} km/h</span>{warn}</div>")
+              self.info.setText(f"<div style='font-size:10pt'>{rng}{t1}<br>{last}{warn}</div>")
 
           def _status(self, s):
               ok = s.phase in ("running", "learning")
@@ -1499,6 +1793,27 @@ blocks:
                   proc = f"<span style='color:{COL['dim']}'>Idle</span>"
               self.st_proc.setText("Processing: " + proc)
               self.st_clock.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
+      def _offset_file():
+          """range_calibration.txt next to the running flowgraph (gnuradio folder)."""
+          return os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "range_calibration.txt")
+
+
+      def save_offset(value):
+          try:
+              with open(_offset_file(), "w") as fh:
+                  fh.write(f"{value:.2f}\n")
+          except OSError as e:
+              print(f"Radar screen: could not save the range offset ({e})")
+
+
+      def load_offset():
+          try:
+              with open(_offset_file()) as fh:
+                  return float(fh.read().strip())
+          except (OSError, ValueError):
+              return None
 
 
       def _check_png():
@@ -1521,6 +1836,11 @@ blocks:
           """Called by the Python Snippet block (Main - After Init): puts the radar console in the flowgraph window."""
           screen = RadarScreen(tb)
           tb.radar_screen = screen
+          saved = load_offset()                            # Range Offset from the last calibration
+          if saved is not None:
+              screen.sb_offset.setValue(saved)
+              tb.set_range_offset(saved)
+              print(f"Radar screen: Range Offset {saved:+.2f} m (from range_calibration.txt)")
           for name, w in list(vars(tb).items()):          # the console replaces the plain GNU Radio sliders
               if name.startswith("_") and name.endswith("_win") and isinstance(w, QtWidgets.QWidget):
                   w.hide()
@@ -1557,17 +1877,33 @@ connections:
   - '0'
 - - iio_pluto_source_0
   - '0'
-  - freq_xlating_fir_filter_xxx_0
+  - blocks_multiply_xx_0
   - '0'
+- - blocks_vector_source_x_0
+  - '0'
+  - blocks_multiply_xx_0
+  - '1'
 - - iio_pluto_source_0
   - '0'
-  - freq_xlating_fir_filter_xxx_1
+  - blocks_multiply_xx_1
   - '0'
-- - freq_xlating_fir_filter_xxx_0
+- - blocks_vector_source_x_1
+  - '0'
+  - blocks_multiply_xx_1
+  - '1'
+- - blocks_multiply_xx_0
+  - '0'
+  - fir_filter_xxx_lp0
+  - '0'
+- - blocks_multiply_xx_1
+  - '0'
+  - fir_filter_xxx_lp1
+  - '0'
+- - fir_filter_xxx_lp0
   - '0'
   - fir_filter_xxx_0
   - '0'
-- - freq_xlating_fir_filter_xxx_1
+- - fir_filter_xxx_lp1
   - '0'
   - fir_filter_xxx_1
   - '0'
