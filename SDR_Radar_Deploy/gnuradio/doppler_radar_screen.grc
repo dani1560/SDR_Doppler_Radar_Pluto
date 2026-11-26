@@ -962,7 +962,9 @@ blocks:
       the phase difference between the two tones (dual-frequency CW). The bearing inside the antenna beam is not
       measured, so a target is drawn across the beam at its measured range.
       """
+      import csv
       import math
+      from collections import deque
       import os
       import sys
       import time
@@ -1509,6 +1511,10 @@ blocks:
               self.show_rings = self.show_cross = True
               self.cmap_name = "Jet"
               self.max_range = float(getattr(tb, "range_m", 10))
+              self.last_seen = None                       # full status of the last detection, kept when it is gone
+              self.pass_rec = None                        # detection in progress (its peak speed)
+              self.gap = 0
+              self.recent = deque(load_detections(), maxlen=5)   # last detections, also from earlier runs
               self.setMinimumSize(1300, 760)
 
               root = QtWidgets.QVBoxLayout(self)
@@ -1696,6 +1702,7 @@ blocks:
                   return
               self.state = s
               self._calibration_step(s)
+              self._track(s)
               self.echo.update(s, est_range(s, self.max_range) / self.max_range
                                if s.target and s.range_m is not None else None)
               self.b_start.setEnabled(not self.running)
@@ -1742,6 +1749,31 @@ blocks:
               self.sb_offset.setValue(round(off, 1))       # calls tb.set_range_offset and saves it
               self.cal_msg = f"Calibrated: Range Offset {off:+.1f} m from {len(c['vals'])} readings (saved)."
 
+          def _track(self, s):
+              """Keep the full status of the last detection and a list of recent detections (peak of each)."""
+              now = datetime.now().strftime("%H:%M:%S")
+              if s.target:
+                  snap = {"time": now, "kmh": s.kmh, "fd": s.fd, "snr": s.snr, "range": s.range_m, "over": s.over}
+                  self.last_seen = snap
+                  p = self.pass_rec
+                  if p is None:
+                      self.pass_rec = dict(snap, frames=1)
+                  else:
+                      p["frames"] += 1
+                      if abs(s.kmh) > abs(p["kmh"]):
+                          p.update(kmh=s.kmh, fd=s.fd, snr=s.snr, over=s.over)
+                      if s.range_m is not None:
+                          p["range"] = s.range_m
+                      p["time"] = now
+                  self.gap = 0
+              elif self.pass_rec is not None:
+                  self.gap += 1
+                  if self.gap >= 5:                          # 0.5 s without the target ends the detection
+                      if self.pass_rec["frames"] >= 3:
+                          self.recent.appendleft(self.pass_rec)
+                          save_detection(self.pass_rec, s.limit)
+                      self.pass_rec = None
+
           def _info(self, s):
               g, r, d, a = COL["green"], COL["red"], COL["dim"], COL["amber"]
               if s.target:
@@ -1758,13 +1790,25 @@ blocks:
               else:
                   why = {"learning": "learning the background", "no data": "no samples from the Pluto",
                          "stopped": "radar stopped", "starting": "starting"}.get(s.phase, "waiting for movement")
-                  t1 = f"<b>No target</b><br><span style='color:{d}'>{why}</span>"
-              if s.last_kmh is None:
-                  last = f"<span style='color:{d}'>Last pass: none yet</span>"
-              else:
-                  cap = f"<b style='color:{r}'>CAPTURED</b>" if s.last_captured else f"<span style='color:{g}'>under limit</span>"
-                  last = (f"Last pass: <b>{abs(s.last_kmh):.1f} km/h</b> at {s.last_time} &nbsp;{cap}<br>"
-                          f"<span style='color:{d}'>Session: captured {s.n_captured}, top {s.top_kmh:.1f} km/h</span>")
+                  t1 = f"<b>No target now</b> <span style='color:{d}'>({why})</span>"
+                  L = self.last_seen
+                  if L:
+                      lway = "approaching" if L["kmh"] > 0 else "receding"
+                      lflag = f" <b style='color:{r}'>OVERSPEED</b>" if L["over"] else ""
+                      lrng = f"{L['range']:.1f} m" if L["range"] is not None else "--"
+                      t1 += (f"<br><b style='color:{a}'>Last detection at {L['time']}</b><br>"
+                             f"Speed: <b style='font-size:13pt'>{abs(L['kmh']):.1f} km/h</b> {lway}{lflag}<br>"
+                             f"Velocity: {L['kmh'] / 3.6:+.1f} m/s &nbsp; Doppler: {L['fd']:+.0f} Hz<br>"
+                             f"Signal: {L['snr']:.0f} dB &nbsp; Range: <b style='color:{COL['cyan']}'>{lrng}</b>")
+              rows = ""
+              for p in self.recent:
+                  pr = f"{p['range']:.1f} m" if p["range"] is not None else "--"
+                  over = f" <b style='color:{r}'>OVER</b>" if p["over"] else ""
+                  rows += (f"{p['time']} &nbsp;<b>{abs(p['kmh']):.1f} km/h</b> "
+                           f"{'in' if p['kmh'] > 0 else 'out'} &nbsp;{pr}{over}<br>")
+              last = (f"<br><b style='color:{d}'>Recent detections</b> <span style='color:{d}'>(peak speed, saved)</span><br>"
+                      f"<span style='font-size:9.5pt'>{rows or 'none yet<br>'}</span>"
+                      f"<span style='color:{d}'>Session: captured {s.n_captured}, top {s.top_kmh:.1f} km/h</span>")
               warn = (f"<br><b style='color:{r}'>CLIPPING: raise TX attenuation or lower RX gain</b>"
                       if s.clipping and self.running else "")
               if self.calib:
@@ -1798,6 +1842,50 @@ blocks:
       def _offset_file():
           """range_calibration.txt next to the running flowgraph (gnuradio folder)."""
           return os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "range_calibration.txt")
+
+
+      DET_FIELDS = ["date", "time", "speed_kmh", "direction", "velocity_ms", "doppler_hz", "signal_db", "range_m",
+                    "limit_kmh", "overspeed"]
+
+
+      def _detections_file():
+          """detections_log.csv next to the running flowgraph: every detection with its full status."""
+          return os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "detections_log.csv")
+
+
+      def save_detection(p, limit):
+          path = _detections_file()
+          try:
+              new = not os.path.exists(path)
+              with open(path, "a", newline="") as fh:
+                  w = csv.writer(fh)
+                  if new:
+                      w.writerow(DET_FIELDS)
+                  w.writerow([datetime.now().strftime("%Y-%m-%d"), p["time"], f"{abs(p['kmh']):.1f}",
+                              "approaching" if p["kmh"] > 0 else "receding", f"{p['kmh'] / 3.6:+.2f}",
+                              f"{p['fd']:+.0f}", f"{p['snr']:.0f}", "" if p["range"] is None else f"{p['range']:.1f}",
+                              f"{limit:g}", "yes" if p["over"] else "no"])
+          except OSError as e:
+              print(f"Radar screen: could not save the detection ({e})")
+
+
+      def load_detections(n=5):
+          """The last n detections from detections_log.csv, newest first, for the Recent list."""
+          try:
+              with open(_detections_file(), newline="") as fh:
+                  rows = list(csv.DictReader(fh))[-n:]
+          except OSError:
+              return []
+          out = []
+          for row in reversed(rows):
+              try:
+                  k = float(row["speed_kmh"]) * (1 if row["direction"] == "approaching" else -1)
+                  out.append({"time": row["time"], "kmh": k, "fd": float(row["doppler_hz"]),
+                              "snr": float(row["signal_db"]), "range": float(row["range_m"]) if row["range_m"] else None,
+                              "over": row["overspeed"] == "yes"})
+              except (KeyError, ValueError):
+                  continue
+          return out
 
 
       def save_offset(value):

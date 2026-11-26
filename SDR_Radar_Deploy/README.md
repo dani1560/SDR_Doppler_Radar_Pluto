@@ -118,7 +118,10 @@ times a second:
 - **Display Options:** range rings, crosshair, velocity map on/off, colour map (Jet, Viridis, Grey), Max Range
   (display scale), Range Offset, and the **Calibrate at** button with the known distance.
 - **Targets Info:** speed (km/h and m/s), direction, Doppler frequency, signal, OVERSPEED, **measured range**,
-  last pass and capture (from `speed_log.csv`), CLIPPING warning.
+  CLIPPING warning. When the target has gone, the full status of the **last detection** stays on screen with its
+  time, and **Recent detections** lists the last 5 (time, peak speed, in/out, range, OVER). Every detection is
+  saved with its full status in `gnuradio/detections_log.csv` (date, time, speed, direction, velocity, Doppler,
+  signal, range, limit, overspeed); the last 5 are shown again after a restart.
 - **PPI Display:** echo strength (dB colour scale) of detected targets at their measured range on the fixed
   antenna beam (dashed), fading over ~4 s, so a walking target leaves a track.
 - **Doppler Velocity Map:** the antenna beam coloured by radial speed (m/s, + = approaching).
