@@ -14,6 +14,21 @@ connection once.
 The Arduino keeps its program when unplugged. A Nano that already works does **not** need to be programmed
 again on the new laptop, so the Arduino IDE is only needed to change the sketch.
 
+## Updating a laptop that already has an old version
+
+Drivers, Python and radioconda stay installed; only the project files change.
+
+1. Close every radar window and GNU Radio Companion on that laptop (do **not** save the flowgraph).
+2. Get the new files:
+   - **Folder made with `git clone`:** open a terminal in the project folder and run `git pull`. If Git says
+     local changes would be overwritten, run `git stash` and then `git pull` again.
+   - **Folder copied or from a ZIP:** rename the old `SDR_Radar_Deploy` folder (e.g. `SDR_Radar_Deploy_old`),
+     download the new ZIP from GitHub (**Code → Download ZIP**) and unzip it. Copy `speed_log.csv` from the
+     old folder into the new one to keep the pass history.
+3. Plug in the Pluto, wait 30 s, and double-click **`START_RADAR_SCREEN.bat`**. The first start builds the
+   flowgraph (a few seconds).
+4. Calibrate once (**Calibrate at**, see Step 6). The Arduino Nano does not need to be programmed again.
+
 ## Step 1: Copy the project folder
 
 Use either way:
@@ -82,6 +97,13 @@ attenuation 20 dB, Min signal 15 dB, RX gain 30 dB. Slider changes are not saved
 open `EDIT_GNURADIO.bat`, double-click the slider block, set Default Value, OK, Ctrl+S. Stand still for 3 s while it learns the background. Close the window to stop; the
 transmitter is muted automatically. To show the block diagram, double-click **`EDIT_GNURADIO.bat`**
 (GNU Radio Companion opens `gnuradio/doppler_radar.grc`; its Run button starts the radar too).
+
+**Radar console with speed + range (newest):** double-click **`START_RADAR_SCREEN.bat`**. GNU Radio Companion
+shows the flowgraph (`gnuradio/doppler_radar_screen.grc`, do not press Run there as well) and the radar console
+opens maximised: PPI display, velocity map, Doppler profile, waterfall, targets info with the last detection.
+Defaults: TX attenuation 0 dB, RX gain 50 dB, Max Range 12 m. On a new laptop or in a new place, press
+**Calibrate at** once (known distance, walk back and forth at the mark for 10 s); the offset is saved in
+`gnuradio/range_calibration.txt`. Every detection is saved in `gnuradio/detections_log.csv`.
 
 **Python version (backup):** double-click **`START_RADAR.bat`**. It uses the same defaults (speed limit
 10 km/h). To change them, open `START_RADAR.bat` in Notepad and edit `LIMIT`, `MAXKMH`, `FREQ_MHZ`,
